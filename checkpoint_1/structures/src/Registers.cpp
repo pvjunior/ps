@@ -1,6 +1,12 @@
 #include "Registers.h"
 #include <stdexcept>
 
+Registers::Registers()
+    : A(0), X(0), L(0), B(0),
+      S(0), T(0), PC(0), SW(0), F(0)
+{
+}
+
 uint32_t Registers::get(int n) const {
     switch (n) {
         case 0: return A;
@@ -44,6 +50,5 @@ int Registers::getCC() const {
 }
 
 void Registers::setCC(int cc) {
-    //????
-    return;
+    (void)cc;
 }
