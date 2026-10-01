@@ -44,11 +44,11 @@ void Registers::setF(uint64_t val) {
     F = val & 0xFFFFFFFFFFFFULL;   // keep only 48 bits
 }
 
+// CC (Código de Condição: 0='<', 1='=', 2='>') armazenado nos bits 6 e 7 de SW
 int Registers::getCC() const {
-    //????
-    return -1;
+    return (SW >> 6) & 0x03;
 }
 
 void Registers::setCC(int cc) {
-    (void)cc;
+    SW = (SW & ~(0x03 << 6)) | ((cc & 0x03) << 6);
 }
