@@ -1,13 +1,34 @@
-# Montador SIC/XE — checkpoint 2
+# Checkpoint 2 — montador SIC/XE (integrante 6)
 
-**Responsabilidade do integrante 6:** interface por linha de comando, orquestração e compilação. O simulador do checkpoint 1 permanece separado e inalterado.
+**Responsabilidade:** `main.cpp` (CLI e orquestração), `Makefile` (compilação isolada), `README.md` (uso e demonstração). Nenhum arquivo do checkpoint 1 ou dos demais integrantes foi modificado nesta contribuição.
 
-## Compilar e executar
+## Estado de integração — 21/10/2026
 
-Execute os comandos **dentro de `checkpoint_2`** (Linux, WSL, Git Bash com Make e g++ instalados):
+Foi conferido o bundle Git com `origin/main` no commit `e264d9a`:
+
+- **Integrante 1 (Pablo):** `AssemblerTypes` e `OpcodeTable` presentes.
+- **Integrante 2 (Vinícius):** `parseFile()` presente.
+- **Integrante 3 (Samuel):** `runPassOne(const std::vector<ParsedLine>&)` presente e integrado à `main`.
+- **Integrante 4 (Nickolas):** `runPassTwo(const PassOneResult&)` e `Encoder` presentes na `main`.
+- **Integrante 5 (Dionatahan):** `ObjectProgram.*` e `SimulatorBridge.*` **ainda não constavam do bundle**, portanto os dois pontos de integração dependem dos headers finais dele.
+- **Integrante 7 (Pedro Paulo):** exemplos e testes **ainda não constavam do bundle**.
+
+Os nomes de funções e tipos das passagens 1 e 2 estão confirmados. Não é necessário editá-las nem alterá-las para adequação à CLI.
+
+## Compilar (MSYS2 UCRT64, Linux ou similar)
+
+Dentro de `checkpoint_2`:
 
 ```bash
-make clean && make
+make clean
+make
+```
+
+O projeto usa C++17, `-Wall -Wextra -Wpedantic`; os `.o` ficam em `build/`. O executável será `assembler` (ou `assembler.exe` no Windows). A compilação usa os arquivos `.cpp` colocados na pasta `src/` e os componentes essenciais do simulador, mantendo o build do checkpoint 1 isolado. Enquanto os quatro arquivos da parte 5 estiverem ausentes, `make` informa claramente essa pendência; isso não é falha do GCC.
+
+## Executar a CLI
+
+```bash
 ./assembler examples/valid.asm
 ./assembler examples/valid.asm -o examples/saida.obj
 ./assembler examples/valid.asm --load
@@ -16,53 +37,42 @@ make test
 make clean
 ```
 
-**Atenção:** em 20/10/2026, o ZIP fornecido ainda não tinha os módulos `PassOne`, `PassTwo`, `ObjectProgram` e `SimulatorBridge`. A compilação final e a montagem funcional dependem da integração dos commits dos integrantes responsáveis. Também aguardamos `examples/valid.asm` e `tests/test_assembler.cpp` do integrante 7. `make test` falha explicitamente se nenhum teste existir, em vez de apresentar falso sucesso.
+**Sintaxe:** `./assembler <entrada.asm> [-o saida.obj] [--load]`
 
-## Interface
+- O `.asm` é obrigatório; opções inválidas imprimem o uso e retornam código **2**.
+- O destino padrão é o mesmo nome e diretório do `.asm`, com extensão `.obj`.
+- A CLI percorre `parseFile` → `runPassOne` → `runPassTwo` → `buildObjectProgram`.
+- Qualquer diagnóstico é exibido em `arquivo:linha: mensagem` no `stderr` e causa saída **1**.
+- Somente se todas as etapas estiverem corretas o objeto é gravado. O texto é escrito em `.tmp` e renomeado depois da escrita, protegendo o arquivo anterior quando houver erro de análise/montagem.
+- `--load` instancia `Machine` e usa `SimulatorBridge` para carregar bytes sem iniciar a interface gráfica (TUI).
+- Saída **0** significa que a operação solicitada terminou com sucesso.
 
-```text
-./assembler <entrada.asm> [-o saida.obj] [--load]
-```
+O comando `make test` compila testes C++ de `tests/*.cpp` quando existirem; se não houver nenhum, exibe uma pendência explícita, evitando falso resultado positivo.
 
-- Entrada obrigatória: um arquivo-fonte `.asm`.
-- `-o`: define o arquivo objeto. Por padrão, usa o mesmo caminho do fonte com extensão `.obj`.
-- `--load`: opcionalmente carrega o programa objeto em uma instância de `Machine`; não inicia a interface visual.
-- Retorno `0`: montagem bem-sucedida; `1`: erro de leitura, montagem, gravação ou carga; `2`: argumentos inválidos.
-- Diagnósticos têm formato `arquivo:linha: mensagem` e vão para `stderr`.
-- Se o parser ou alguma passagem encontrar erros, nenhum arquivo objeto é sobrescrito.
-- O executável é `assembler` e os intermediários de compilação ficam em `build/`, exclusivos da segunda etapa.
-
-## Fluxo e responsabilidades
+## Contrato público e fluxo
 
 ```text
 arquivo.asm
-    | SourceParser::parseFile (integrante 2)
-    v
-ParsedLine[]
-    | runPassOne (integrante 3)
-    v
-enderecos + SymbolTable
-    | runPassTwo (integrante 4)
-    v
-blocos de bytes + relocacoes
-    | buildObjectProgram (integrante 5)
-    v
-arquivo.obj  --[--load/SimulatorBridge]--> Machine (simulador)
+  → parseFile(...)                 [integrante 2]
+  → runPassOne(parsed.lines)       [integrante 3]
+  → runPassTwo(first)              [integrante 4]
+  → buildObjectProgram(first, second) [integrante 5: pendente no bundle]
+  → arquivo.obj
+  → [--load] SimulatorBridge / Machine [integrante 5: pendente no bundle]
 ```
 
-O `main.cpp` apenas chama interfaces públicas. O Makefile identifica automaticamente novos arquivos em `src/`, sem modificar códigos de terceiros. O alvo de teste compila os testes em `tests/` com os módulos de produção, mas **não** vincula `main.cpp` para evitar dois pontos de entrada.
+**PassTwoResult** já fornece `programName`, `startAddress`, `programLength`, `executionStart`, `blocks`, `modifications` e `diagnostics`. Isso é o contrato disponível para a geração dos registros H/T/M/E pelo integrante 5.
 
-## Contratos a confirmar antes da integração final
+### Verificação de integração
 
-O ZIP analisado continha somente o parser e os tipos básicos, portanto as assinaturas de alguns módulos ainda não estavam disponíveis. Para permitir trabalho paralelo, o `main.cpp` foi preparado usando as propostas abaixo. **Os responsáveis pelos módulos 3, 4 e 5 devem confirmar ou fornecer os nomes definitivos das APIs; somente os pontos de integração do `main.cpp` devem ser ajustados, sem alterar os arquivos deles.**
+Em laboratório separado (não incluído na contribuição Git), foram combinados os módulos reais 1–4 com uma implementação provisória **apenas** dos módulos ausentes 5. O exemplo com `LDA #3`, `CLEAR X`, `+JSUB`, `STA BUFFER,X`, `BYTE`, `RESW`, `RSUB` e `END` compilou sem warnings, gerou registros H/T/M/E e permitiu `--load`. Esse teste não substitui a verificação com o código final do integrante 5.
 
-1. Integrante 3: `PassOneResult runPassOne(const std::vector<ParsedLine>&)` com `startAddress`, `programLength`, `symbols`, `diagnostics`.
-2. Integrante 4: `PassTwoResult runPassTwo(const PassOneResult&)` com `diagnostics` e dados necessários ao objeto.
-3. Integrante 5: `ObjectProgram buildObjectProgram(const PassOneResult&, const PassTwoResult&)` com `toText()`; construtor `SimulatorBridge(const ObjectProgram&)`; `loadInto(Machine&)` retornando algo compatível com `LoadResult {ok, error}`.
-4. Integrante 7: `tests/test_assembler.cpp` com `int main()` e `examples/valid.asm`.
+## Demonstração sugerida para o vídeo
 
-## Fala breve para o vídeo (integrante 6)
+1. Entrar em `checkpoint_2`, mostrar `make clean && make`.
+2. Executar `./assembler examples/valid.asm` e mostrar o resumo e o `.obj`.
+3. Explicar parser → passagem 1 → passagem 2 → programa objeto.
+4. Executar um `.asm` inválido, mostrar `arquivo:linha: mensagem` e verificar que o objeto anterior não foi sobrescrito.
+5. Opcionalmente executar `--load` se a ponte do integrante 5 estiver integrada.
 
-> Minha parte é a integração do montador e sua interface no terminal. O executável `assembler` recebe um arquivo Assembly, permite escolher o nome da saída e aciona, em ordem, o parser, a primeira passagem, a segunda passagem e a geração dos registros objeto. Se algum módulo informar um erro, a CLI mostra `arquivo:linha: mensagem`, retorna código 1 e não sobrescreve o arquivo objeto anterior. Configurei também um Makefile separado com compilação C++17, comandos de testes e a opção `--load`, que carrega no simulador sem abrir a interface do primeiro checkpoint.
-
-Para a gravação, mostrar o terminal compilando, um exemplo válido, um exemplo com erro e entregar a fala seguinte ao integrante 7, responsável pelos testes. A fala acima deve ser adaptada às funcionalidades **efetivamente demonstradas** após a integração.
+Use exemplos e comandos que de fato funcionem com a versão definitiva do grupo. O foco da fala é a **integração/CLI/build**, sem tomar para si a explicação das técnicas de codificação, que pertencem aos demais integrantes.

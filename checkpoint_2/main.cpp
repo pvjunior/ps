@@ -1,17 +1,15 @@
-// Ponto de entrada do montador SIC/XE (checkpoint 2).
-// Responsabilidade do integrante 6: CLI, orquestracao e tratamento de erros.
+// Checkpoint 2 - interface de linha de comando do montador SIC/XE.
+// Integrante 6: orquestracao, diagnosticos, arquivo de saida e carregamento.
 //
-// CONTRATO DE INTEGRACAO (confirmar nomes/campos com integrantes 3, 4 e 5):
-//   runPassOne(parsed.lines) -> PassOneResult
-//       .startAddress, .programLength, .symbols, .diagnostics
-//   runPassTwo(passOneResult) -> PassTwoResult
-//       .diagnostics
-//   buildObjectProgram(passOneResult, passTwoResult) -> ObjectProgram
-//       .toText()
-//   SimulatorBridge(ObjectProgram).loadInto(Machine&) -> LoadResult
-//       .ok, .error
-// Estes contratos NAO estavam implementados no ZIP de 20/10/2026.
-// Ajustar apenas as chamadas de integracao abaixo quando forem publicados.
+// APIs REAIS verificadas no commit e264d9a (main, 21/10/2026):
+//   parseFile(caminho)          -> ParseResult
+//   runPassOne(parsed.lines)    -> PassOneResult
+//   runPassTwo(passOneResult)   -> PassTwoResult
+//
+// APIs previstas no README_05, ainda pendentes no bundle analisado:
+//   buildObjectProgram(first, second) -> ObjectProgram (toText())
+//   SimulatorBridge(object).loadInto(machine) -> LoadResult (ok, error)
+// Ao receber a parte 5, conferir somente essas duas chamadas com seus headers.
 
 #include "SourceParser.h"
 #include "PassOne.h"
