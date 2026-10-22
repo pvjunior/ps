@@ -195,9 +195,9 @@ bool getInstructionSize(const std::string& operation, const std::string& operand
 
     size = static_cast<std::uint32_t>(requested);
     const std::string value = trim(operand);
-    if (mnemonic == "RSUB") {
+    if (requested == InstructionFormat::format1 || mnemonic == "RSUB") {
         if (!value.empty()) {
-            error = "RSUB does not accept an operand";
+            error = mnemonic + " does not accept an operand";
             return false;
         }
     } else if (value.empty()) {

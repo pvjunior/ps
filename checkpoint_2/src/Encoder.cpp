@@ -22,18 +22,6 @@ constexpr std::uint8_t kNiIndirect = 0x2;   // n=1 i=0
 
 constexpr std::int64_t kMaxMagnitude = (static_cast<std::int64_t>(1) << 40);
 
-struct Format1Entry {
-    const char* mnemonic;
-    std::uint8_t opcode;
-};
-
-// A tabela de opcodes da passagem 1 não lista formato 1; mantemos aqui os
-// mnemônicos para que o codificador já os suporte.
-const Format1Entry kFormat1[] = {
-    {"FIX", 0xC4}, {"FLOAT", 0xC0}, {"HIO", 0xF4},
-    {"NORM", 0xC8}, {"SIO", 0xF0}, {"TIO", 0xF8},
-};
-
 struct RegisterEntry {
     const char* name;
     std::uint8_t number;
@@ -375,22 +363,19 @@ EncodeOutcome encodeInstruction(const std::string& operation,
 
     const OpcodeInfo* info = OpcodeTable::find(mnemonic);
     if (info == nullptr) {
-        // Formato 1 (apenas opcode).
-        for (const Format1Entry& entry : kFormat1) {
-            if (mnemonic == entry.mnemonic) {
-                if (extended) {
-                    return fail("format 1 instruction '" + mnemonic +
-                                "' cannot use '+'");
-                }
-                if (!trim(operand).empty()) {
-                    return fail("'" + mnemonic + "' does not accept an operand");
-                }
-                EncodedStatement statement;
-                statement.bytes = {entry.opcode};
-                return success(std::move(statement));
-            }
-        }
         return fail("unknown opcode '" + operation + "'");
+    }
+
+    if (formatListContains(*info, InstructionFormat::format1)) {
+        if (extended) {
+            return fail("format 1 instruction '" + mnemonic + "' cannot use '+'");
+        }
+        if (!trim(operand).empty()) {
+            return fail("'" + mnemonic + "' does not accept an operand");
+        }
+        EncodedStatement statement;
+        statement.bytes = {info->opcode};
+        return success(std::move(statement));
     }
 
     if (formatListContains(*info, InstructionFormat::format2)) {
