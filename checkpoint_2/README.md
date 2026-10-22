@@ -1,7 +1,5 @@
 # Checkpoint 2 — montador SIC/XE
 
-**Integrante 6 — Gabriel M.** Responsável pela interface de linha de comando (`main.cpp`), pela compilação isolada (`Makefile`) e pela documentação deste ponto de entrada. O código do checkpoint 1 e os módulos dos outros integrantes não são alterados por esta contribuição.
-
 ## Compilação
 
 Ambiente recomendado: **MSYS2 UCRT64**, com `g++` (C++17) e GNU Make. No terminal, dentro de `checkpoint_2`:
