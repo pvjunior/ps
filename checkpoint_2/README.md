@@ -106,4 +106,3 @@ cmp -s build/video/video.obj build/video/copia.obj && echo "Objeto anterior pres
 
 Argumentos ausentes também são tratados pela CLI: `./assembler.exe` imprime a sintaxe de uso e retorna **código 2**.
 
-A explicação do integrante 6 deve mostrar **como as etapas são chamadas e como o programa é executado**, sem atribuir a ele as implementações internas do parser, das passagens, da codificação, da geração dos registros ou da ponte do simulador.
