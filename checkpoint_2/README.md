@@ -58,17 +58,54 @@ ObjectProgram(...)               Integrante 5 — Dionathan
 
 Os contratos da parte 5 utilizam um **construtor e métodos da classe** `ObjectProgram`, não a função `buildObjectProgram` da versão provisória. `loadInto()` retorna `std::vector<Diagnostic>`; vetor vazio significa ausência de erros informados pela ponte.
 
-## Dependência de integração identificada em 21/10/2026
+## Estado da integração
 
-No bundle que contém a `main` no commit `d37febc`, tanto `PassTwo.h` quanto `ObjectProgram.h` declaram o tipo global `ObjectBlock`. Ao incluir ambas as interfaces no mesmo programa ocorre **redefinição de struct**. Essa questão **precisa ser corrigida na parte 5 pelo responsável**: `ObjectProgram.h` deve incluir `PassTwo.h` e reutilizar o tipo `ObjectBlock` existente em vez de declará-lo novamente.
+Na versão integrada à branch `main` pelo **Pull Request #4**, a incompatibilidade de `ObjectBlock` foi resolvida: `ObjectProgram.h` reutiliza a definição compartilhada de `PassTwo.h`, sem declarar a estrutura novamente. As instruções SIC/XE de **formato 1** (`FIX`, `FLOAT`, `HIO`, `NORM`, `SIO` e `TIO`) também foram alinhadas entre a tabela de opcodes, a primeira passagem e o encoder.
 
-Com **essa correção aplicada somente na cópia de integração**, os módulos reais compilam com `g++ -std=c++17 -Wall -Wextra -Wpedantic` sem warnings. Foram testados os registros H/T/M/E, uma fonte válida, uma fonte com símbolo inexistente, blocos maiores que 30 bytes, lacunas de memória e o comando `--load`. A correção não está dentro dos três arquivos do integrante 6 e deve entrar no histórico por meio da contribuição do integrante 5.
+Essas correções foram realizadas colaborativamente nos módulos dos respectivos integrantes. A **parte 6 permanece responsável somente pela CLI, pela orquestração, pelo Makefile e por esta documentação**.
 
-## Demonstração de integração
+A integração foi verificada em **Windows/MSYS2 UCRT64, G++ 16.2.0**, com `make`, `make test`, montagem válida, geração de H/T/M/E, `--load`, detecção de símbolo inexistente e preservação do objeto em caso de erro. Também foi realizado um teste específico das seis instruções de formato 1. Esses testes comprovam os cenários exercitados; a verificação mais abrangente dos requisitos permanece sob responsabilidade dos testes da equipe.
 
-1. Executar `make clean && make && make test` na pasta `checkpoint_2`.
-2. Executar `./assembler build/smoke/valid.asm -o build/smoke/demonstracao.obj --load` e mostrar o resumo.
-3. Exibir o conteúdo do `.obj` (H/T/M/E) e explicar como a CLI encadeia as etapas.
-4. Executar `./assembler build/smoke/invalid.asm -o build/smoke/demonstracao.obj` e explicar o diagnóstico, o retorno diferente de zero e a proteção da saída anterior.
+## Demonstração reproduzível da CLI
 
-A explicação do integrante 6 é sobre **orquestração, CLI e compilação**, mantendo as implementações das passagens e do objeto sob a responsabilidade dos outros integrantes.
+No terminal **MSYS2 UCRT64**, dentro de `checkpoint_2`, execute `make` e prepare os arquivos de demonstração abaixo. Eles são independentes dos exemplos gerados por `make test`:
+
+```bash
+mkdir -p build/video
+cat > build/video/valid.asm <<'EOF'
+COPY START 1000
+FIRST LDA #3
+      CLEAR X
+      +JSUB SUBR
+      STA BUFFER,X
+      BYTE C'EOF'
+BUFFER RESW 1
+SUBR  RSUB
+      END FIRST
+EOF
+cat > build/video/invalid.asm <<'EOF'
+BAD START 1000
+    LDA MISSING
+    END
+EOF
+```
+
+Demonstração de sucesso: o arquivo objeto é criado e carregado na memória do simulador, sem executar as instruções ou abrir a TUI.
+
+```bash
+./assembler.exe build/video/valid.asm -o build/video/video.obj --load
+cat build/video/video.obj
+```
+
+Demonstração de erro: copie o objeto válido, tente montar uma fonte com símbolo inexistente usando a **mesma saída**, e confira que a montagem falha com código 1 sem alterar o objeto anterior.
+
+```bash
+cp build/video/video.obj build/video/copia.obj
+./assembler.exe build/video/invalid.asm -o build/video/video.obj
+echo $?
+cmp -s build/video/video.obj build/video/copia.obj && echo "Objeto anterior preservado"
+```
+
+Argumentos ausentes também são tratados pela CLI: `./assembler.exe` imprime a sintaxe de uso e retorna **código 2**.
+
+A explicação do integrante 6 deve mostrar **como as etapas são chamadas e como o programa é executado**, sem atribuir a ele as implementações internas do parser, das passagens, da codificação, da geração dos registros ou da ponte do simulador.
