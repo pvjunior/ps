@@ -5,6 +5,7 @@
 #include <vector>
 
 enum class InstructionFormat : std::uint8_t {
+    format1 = 1,
     format2 = 2,
     format3 = 3,
     format4 = 4
