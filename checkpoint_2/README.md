@@ -1,78 +1,74 @@
-# Checkpoint 2 — montador SIC/XE (integrante 6)
+# Checkpoint 2 — montador SIC/XE
 
-**Responsabilidade:** `main.cpp` (CLI e orquestração), `Makefile` (compilação isolada), `README.md` (uso e demonstração). Nenhum arquivo do checkpoint 1 ou dos demais integrantes foi modificado nesta contribuição.
+**Integrante 6 — Gabriel M.** Responsável pela interface de linha de comando (`main.cpp`), pela compilação isolada (`Makefile`) e pela documentação deste ponto de entrada. O código do checkpoint 1 e os módulos dos outros integrantes não são alterados por esta contribuição.
 
-## Estado de integração — 21/10/2026
+## Compilação
 
-Foi conferido o bundle Git com `origin/main` no commit `e264d9a`:
-
-- **Integrante 1 (Pablo):** `AssemblerTypes` e `OpcodeTable` presentes.
-- **Integrante 2 (Vinícius):** `parseFile()` presente.
-- **Integrante 3 (Samuel):** `runPassOne(const std::vector<ParsedLine>&)` presente e integrado à `main`.
-- **Integrante 4 (Nickolas):** `runPassTwo(const PassOneResult&)` e `Encoder` presentes na `main`.
-- **Integrante 5 (Dionatahan):** `ObjectProgram.*` e `SimulatorBridge.*` **ainda não constavam do bundle**, portanto os dois pontos de integração dependem dos headers finais dele.
-- **Integrante 7 (Pedro Paulo):** exemplos e testes **ainda não constavam do bundle**.
-
-Os nomes de funções e tipos das passagens 1 e 2 estão confirmados. Não é necessário editá-las nem alterá-las para adequação à CLI.
-
-## Compilar (MSYS2 UCRT64, Linux ou similar)
-
-Dentro de `checkpoint_2`:
+Ambiente recomendado: **MSYS2 UCRT64**, com `g++` (C++17) e GNU Make. No terminal, dentro de `checkpoint_2`:
 
 ```bash
 make clean
 make
+make test
 ```
 
-O projeto usa C++17, `-Wall -Wextra -Wpedantic`; os `.o` ficam em `build/`. O executável será `assembler` (ou `assembler.exe` no Windows). A compilação usa os arquivos `.cpp` colocados na pasta `src/` e os componentes essenciais do simulador, mantendo o build do checkpoint 1 isolado. Enquanto os quatro arquivos da parte 5 estiverem ausentes, `make` informa claramente essa pendência; isso não é falha do GCC.
+O alvo principal é `assembler` (no Windows, normalmente `assembler.exe`). O `Makefile` compila os `.cpp` de `src/` e somente os componentes de núcleo necessários do simulador, sem compilar a interface TUI. Os objetos e dependências geradas ficam em `build/`, separados do checkpoint 1.
 
-## Executar a CLI
+`make test` executa `tests/*.cpp`, se existirem. Se a equipe ainda não tiver disponibilizado testes C++, executa **testes de fumaça reais pela CLI**, gerando fontes temporários em `build/smoke/` para conferir montagem válida, registros H/T/M/E, carregamento opcional, diagnóstico e preservação do objeto anterior quando houver erro.
+
+## Interface
 
 ```bash
-./assembler examples/valid.asm
-./assembler examples/valid.asm -o examples/saida.obj
-./assembler examples/valid.asm --load
-make run INPUT=examples/valid.asm
-make test
-make clean
+./assembler arquivo.asm
+./assembler arquivo.asm -o saida.obj
+./assembler arquivo.asm --load
+make run INPUT=arquivo.asm
 ```
 
-**Sintaxe:** `./assembler <entrada.asm> [-o saida.obj] [--load]`
+Uso: `./assembler <entrada.asm> [-o saida.obj] [--load]`
 
-- O `.asm` é obrigatório; opções inválidas imprimem o uso e retornam código **2**.
-- O destino padrão é o mesmo nome e diretório do `.asm`, com extensão `.obj`.
-- A CLI percorre `parseFile` → `runPassOne` → `runPassTwo` → `buildObjectProgram`.
-- Qualquer diagnóstico é exibido em `arquivo:linha: mensagem` no `stderr` e causa saída **1**.
-- Somente se todas as etapas estiverem corretas o objeto é gravado. O texto é escrito em `.tmp` e renomeado depois da escrita, protegendo o arquivo anterior quando houver erro de análise/montagem.
-- `--load` instancia `Machine` e usa `SimulatorBridge` para carregar bytes sem iniciar a interface gráfica (TUI).
-- Saída **0** significa que a operação solicitada terminou com sucesso.
+- O argumento `.asm` é obrigatório. Se `-o` não for fornecido, o arquivo `.obj` é criado no mesmo diretório da fonte.
+- Opções incorretas exibem a mensagem de uso e encerram com **código 2**.
+- Diagnósticos do parser e de ambas as passagens são exibidos como `arquivo:linha: mensagem` em `stderr` e encerram com **código 1**. O arquivo `.obj` anterior permanece intacto nesses casos.
+- Na montagem válida, o executável grava o objeto usando um arquivo temporário, exibe o endereço inicial, o comprimento e o total de símbolos e encerra com **código 0**.
+- `--load` instancia `Machine`, passa o `ObjectProgram` à `SimulatorBridge` e reporta eventuais diagnósticos, sem abrir a interface de texto (TUI). Isso **carrega** a memória, mas não executa as instruções.
 
-O comando `make test` compila testes C++ de `tests/*.cpp` quando existirem; se não houver nenhum, exibe uma pendência explícita, evitando falso resultado positivo.
-
-## Contrato público e fluxo
+## Fluxo de orquestração
 
 ```text
 arquivo.asm
-  → parseFile(...)                 [integrante 2]
-  → runPassOne(parsed.lines)       [integrante 3]
-  → runPassTwo(first)              [integrante 4]
-  → buildObjectProgram(first, second) [integrante 5: pendente no bundle]
-  → arquivo.obj
-  → [--load] SimulatorBridge / Machine [integrante 5: pendente no bundle]
+   │
+   ▼
+parseFile(input)                  Integrante 2 — Vinícius
+   │ ParseResult
+   ▼
+runPassOne(parsed.lines)          Integrante 3 — Samuel
+   │ PassOneResult
+   ▼
+runPassTwo(first)                 Integrante 4 — Nickolas
+   │ PassTwoResult: programa, blocos e modificações
+   ▼
+ObjectProgram(...)               Integrante 5 — Dionathan
+  addBlock(...)
+  addModification(...)
+  toText() → arquivo.obj
+   │
+   └── --load → SimulatorBridge(object).loadInto(machine)
 ```
 
-**PassTwoResult** já fornece `programName`, `startAddress`, `programLength`, `executionStart`, `blocks`, `modifications` e `diagnostics`. Isso é o contrato disponível para a geração dos registros H/T/M/E pelo integrante 5.
+Os contratos da parte 5 utilizam um **construtor e métodos da classe** `ObjectProgram`, não a função `buildObjectProgram` da versão provisória. `loadInto()` retorna `std::vector<Diagnostic>`; vetor vazio significa ausência de erros informados pela ponte.
 
-### Verificação de integração
+## Dependência de integração identificada em 21/10/2026
 
-Em laboratório separado (não incluído na contribuição Git), foram combinados os módulos reais 1–4 com uma implementação provisória **apenas** dos módulos ausentes 5. O exemplo com `LDA #3`, `CLEAR X`, `+JSUB`, `STA BUFFER,X`, `BYTE`, `RESW`, `RSUB` e `END` compilou sem warnings, gerou registros H/T/M/E e permitiu `--load`. Esse teste não substitui a verificação com o código final do integrante 5.
+No bundle que contém a `main` no commit `d37febc`, tanto `PassTwo.h` quanto `ObjectProgram.h` declaram o tipo global `ObjectBlock`. Ao incluir ambas as interfaces no mesmo programa ocorre **redefinição de struct**. Essa questão **precisa ser corrigida na parte 5 pelo responsável**: `ObjectProgram.h` deve incluir `PassTwo.h` e reutilizar o tipo `ObjectBlock` existente em vez de declará-lo novamente.
 
-## Demonstração sugerida para o vídeo
+Com **essa correção aplicada somente na cópia de integração**, os módulos reais compilam com `g++ -std=c++17 -Wall -Wextra -Wpedantic` sem warnings. Foram testados os registros H/T/M/E, uma fonte válida, uma fonte com símbolo inexistente, blocos maiores que 30 bytes, lacunas de memória e o comando `--load`. A correção não está dentro dos três arquivos do integrante 6 e deve entrar no histórico por meio da contribuição do integrante 5.
 
-1. Entrar em `checkpoint_2`, mostrar `make clean && make`.
-2. Executar `./assembler examples/valid.asm` e mostrar o resumo e o `.obj`.
-3. Explicar parser → passagem 1 → passagem 2 → programa objeto.
-4. Executar um `.asm` inválido, mostrar `arquivo:linha: mensagem` e verificar que o objeto anterior não foi sobrescrito.
-5. Opcionalmente executar `--load` se a ponte do integrante 5 estiver integrada.
+## Demonstração de integração
 
-Use exemplos e comandos que de fato funcionem com a versão definitiva do grupo. O foco da fala é a **integração/CLI/build**, sem tomar para si a explicação das técnicas de codificação, que pertencem aos demais integrantes.
+1. Executar `make clean && make && make test` na pasta `checkpoint_2`.
+2. Executar `./assembler build/smoke/valid.asm -o build/smoke/demonstracao.obj --load` e mostrar o resumo.
+3. Exibir o conteúdo do `.obj` (H/T/M/E) e explicar como a CLI encadeia as etapas.
+4. Executar `./assembler build/smoke/invalid.asm -o build/smoke/demonstracao.obj` e explicar o diagnóstico, o retorno diferente de zero e a proteção da saída anterior.
+
+A explicação do integrante 6 é sobre **orquestração, CLI e compilação**, mantendo as implementações das passagens e do objeto sob a responsabilidade dos outros integrantes.

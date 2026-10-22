@@ -24,8 +24,8 @@ TEST_SRC  := $(wildcard tests/*.cpp)
 TEST_OBJ  := $(patsubst %.cpp,build/%.o,$(TEST_SRC))
 LIB_OBJ   := $(filter-out build/main.o,$(OBJ))
 
-# Diagnostico claro enquanto os arquivos da parte 5 ainda nao estiverem
-# presentes. Nao acrescenta implementacoes provisórias ao repositorio.
+# Verifica a disponibilidade dos arquivos da parte 5. A compilacao
+# tambem depende da API publica compativel entre PassTwo.h e ObjectProgram.h.
 .PHONY: all test clean run check-integration
 all: check-integration $(TARGET)
 
@@ -46,9 +46,26 @@ build/%.o: %.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(DEPFLAGS) -c $< -o $@
 
 ifeq ($(strip $(TEST_SRC)),)
-test:
-	@echo "ERRO: nenhum teste encontrado em tests/*.cpp (aguardando integrante 7)." >&2
-	@exit 1
+# Testes de fumaca executados pela CLI caso o modulo de testes ainda nao exista.
+# Os arquivos temporarios ficam em build/smoke/, sem poluir o projeto.
+test: check-integration $(TARGET)
+	@mkdir -p build/smoke
+	@printf '%s\n' "COPY START 1000" "FIRST LDA #3" "      CLEAR X" \
+	    "      +JSUB SUBR" "      STA BUFFER,X" "      BYTE C'EOF'" \
+	    "BUFFER RESW 1" "SUBR  RSUB" "      END FIRST" > build/smoke/valid.asm
+	@./$(TARGET) build/smoke/valid.asm -o build/smoke/valid.obj --load
+	@grep -q '^H' build/smoke/valid.obj
+	@grep -q '^T' build/smoke/valid.obj
+	@grep -q '^M' build/smoke/valid.obj
+	@grep -q '^E' build/smoke/valid.obj
+	@printf '%s\n' "BAD START 1000" "    LDA MISSING" "    END" > build/smoke/invalid.asm
+	@cp build/smoke/valid.obj build/smoke/invalid.obj
+	@if ./$(TARGET) build/smoke/invalid.asm -o build/smoke/invalid.obj; then \
+	    echo "ERRO: o montador aceitou um simbolo inexistente" >&2; exit 1; \
+	 fi
+	@cmp -s build/smoke/valid.obj build/smoke/invalid.obj || \
+	    (echo "ERRO: objeto anterior foi sobrescrito em caso de falha" >&2; exit 1)
+	@echo "Smoke tests: CLI valida, --load, H/T/M/E e preservacao de objeto: OK"
 else
 test: check-integration $(TEST_BIN)
 	./$(TEST_BIN)

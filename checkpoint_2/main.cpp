@@ -1,15 +1,5 @@
-// Checkpoint 2 - interface de linha de comando do montador SIC/XE.
-// Integrante 6: orquestracao, diagnosticos, arquivo de saida e carregamento.
-//
-// APIs REAIS verificadas no commit e264d9a (main, 21/10/2026):
-//   parseFile(caminho)          -> ParseResult
-//   runPassOne(parsed.lines)    -> PassOneResult
-//   runPassTwo(passOneResult)   -> PassTwoResult
-//
-// APIs previstas no README_05, ainda pendentes no bundle analisado:
-//   buildObjectProgram(first, second) -> ObjectProgram (toText())
-//   SimulatorBridge(object).loadInto(machine) -> LoadResult (ok, error)
-// Ao receber a parte 5, conferir somente essas duas chamadas com seus headers.
+// Checkpoint 2 - CLI/orquestracao (integrante 6).
+// Integra os modulos publicos de parser, passagens, objeto e simulador.
 
 #include "SourceParser.h"
 #include "PassOne.h"
@@ -152,7 +142,19 @@ int main(int argc, char* argv[]) {
     }
 
     // 4) Registros objeto SIC/XE, sem sobrescrever arquivos em erro.
-    const ObjectProgram object = buildObjectProgram(first, second);
+    ObjectProgram object(second.programName, second.startAddress,
+                         second.programLength, second.executionStart);
+    for (const ObjectBlock& block : second.blocks) {
+        object.addBlock(block);
+    }
+    for (const ModificationEntry& mod : second.modifications) {
+        if (mod.lengthInHalfBytes > std::numeric_limits<std::uint8_t>::max()) {
+            std::cerr << "Erro: tamanho invalido de registro de modificacao.\n";
+            return 1;
+        }
+        object.addModification(ModificationRecord{
+            mod.address, static_cast<std::uint8_t>(mod.lengthInHalfBytes)});
+    }
     std::string ioError;
     if (!saveObject(options.output, object.toText(), ioError)) {
         std::cerr << options.output.string() << ":0: " << ioError << '\n';
@@ -170,9 +172,9 @@ int main(int argc, char* argv[]) {
         }
         Machine machine(static_cast<int>(std::max<std::uint64_t>(1024ULL, last)));
         SimulatorBridge bridge(object);
-        const auto result = bridge.loadInto(machine);
-        if (!result.ok) {
-            std::cerr << "Erro ao carregar no simulador: " << result.error << '\n';
+        const std::vector<Diagnostic> loadDiagnostics = bridge.loadInto(machine);
+        if (!loadDiagnostics.empty()) {
+            printDiagnostics(loadDiagnostics);
             return 1;
         }
         std::cout << "Programa carregado na memoria do simulador (sem iniciar TUI).\n";
