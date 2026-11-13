@@ -1,8 +1,6 @@
 # Checkpoint 3 — Processador de macros e macro-montador SIC/XE
 
-**Disciplina:** Programação de Sistemas — UFPel — 2026/2  
 **Parte 6:** Módulo principal, CLI e build  
-**Responsável:** Gabriel M. Meireles
 
 > **Estado de integração (12/11/2026):** a pasta `checkpoint_3` já foi
 > criada na `main` e o integrante 2 publicou `MacroParser.h` e
