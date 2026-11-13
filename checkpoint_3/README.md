@@ -2,12 +2,12 @@
 
 **Parte 6:** Módulo principal, CLI e build  
 
-> **Estado de integração (12/11/2026):** a pasta `checkpoint_3` já foi
-> criada na `main` e o integrante 2 publicou `MacroParser.h` e
-> `MacroParser.cpp`. Ainda faltam os tipos compartilhados da Parte 1, a
-> tabela/argumentos da Parte 3, o expansor da Parte 4 e a fachada de saída e
-> montagem da Parte 5. A CLI não pode montar um programa com macros até a
-> integração desses módulos; isso não altera a funcionalidade do Checkpoint 2.
+> **Estado de integração (13/11/2026):** estão publicados o parser de macros
+> (Parte 2), a saída `MacroOutput` e a fachada `MacroAssemblerPipeline` (Parte 5),
+> além da CLI e do build desta Parte 6. **Ainda faltam** os tipos compartilhados
+> (Parte 1), a tabela e associação de argumentos (Parte 3), o processador de
+> macros (Parte 4) e os testes/exemplos (Parte 7). O build completo permanece
+> bloqueado até que os módulos obrigatórios cheguem; o Checkpoint 2 não é alterado.
 
 ## Objetivo desta parte
 
@@ -56,8 +56,9 @@ runMacroAssembler(...)           [Parte 5: integra etapas]
 O `main.cpp` chama a fachada uma única vez; a fachada é responsável por
 **ler, expandir, gravar a saída expandida e só então montar**. Um erro na
 expansão impede a montagem. O fluxo deve preservar objetos válidos anteriores
-quando uma nova montagem falhar. O parser do integrante 2 agora está disponível,
-mas ainda precisa dos tipos da Parte 1 para compilar.
+quando uma nova montagem falhar. **A fachada da Parte 5 já foi publicada** e
+sua assinatura corresponde à chamada da CLI; a execução completa ainda depende
+dos contratos e do motor de macros das Partes 1, 3 e 4.
 
 ## Compilar e testar
 
@@ -88,26 +89,38 @@ reutiliza os `.cpp` do montador do Checkpoint 2, **excluindo seu `main.cpp`**,
 para evitar duas funções `main()`. Também vincula o núcleo do simulador exigido
 por `SimulatorBridge.cpp`, mas não compila `TerminalUI.cpp`.
 
-**Situação da atualização:** o Makefile já inclui automaticamente
-`src/MacroParser.cpp` no build por meio de `$(wildcard src/*.cpp)`, sem precisar
-adicionar o parser ao `main.cpp`. Como `MacroParser.h` inclui `MacroTypes.h`, o
-parser **não compila isoladamente** enquanto a Parte 1 não publicar esse header.
-O comando `make status` mostra as dependências presentes e pendentes, e `make`
-interrompe antes de iniciar qualquer compilação caso existam arquivos ausentes.
-Isso evita uma sequência confusa de erros por falta de headers.
+**Situação em 13/11/2026:** os seguintes módulos já estão no repositório:
 
-O parser disponível expõe `parseMacroFile(path)` e
-`parseMacroText(text, sourceName)`, retornando `MacroParseResult` com `lines` e
-`diagnostics`; essa API deve ser consumida pela fachada da Parte 5 ou pelo
-expansor da Parte 4, e **não diretamente pela CLI da Parte 6**. A implementação
-atual também usa o campo `MacroLine.comment`, que precisa existir no contrato
-publicado pela Parte 1 (além de `location`, `originalText`, `label`, `operation`
-e `operands`).
+| Parte | Arquivos publicados | Estado |
+|---|---|---|
+| 2 — Parser | `MacroParser.h`, `MacroParser.cpp` | Presente |
+| 5 — Saída | `MacroOutput.h`, `MacroOutput.cpp` | Presente |
+| 5 — Integração | `MacroAssemblerPipeline.h`, `MacroAssemblerPipeline.cpp` | Presente |
+| 6 — CLI/build | `main.cpp`, `Makefile`, `README.md` | Presente |
+| 1, 3, 4 | Tipos, tabela, argumentos e expansor | **Pendentes** |
+| 7 | Testes e exemplos | **Pendentes** |
 
-**Atenção:** o build completo depende da publicação dos demais módulos e da
-compatibilidade entre suas APIs. O `make status` verifica presença de arquivos,
-**não** comprova compatibilidade C++ nem funcionamento do processador de macros.
-Não há um processador fictício no código entregue.
+O Makefile inclui automaticamente `src/MacroParser.cpp`, `src/MacroOutput.cpp`
+e `src/MacroAssemblerPipeline.cpp` por meio de `$(wildcard src/*.cpp)`.
+A fachada é utilizada diretamente pelo `main.cpp`, **sem** duplicar código dos
+colegas. Atualmente `make status` identifica os oito arquivos obrigatórios
+faltantes (`MacroTypes`, `MacroTable`, `MacroArguments` e `MacroProcessor`,
+respectivos `.h` e `.cpp`). Enquanto faltarem, `make` informa os nomes e
+interrompe antes da compilação.
+
+O parser da Parte 2 utiliza `MacroLine.comment`, que deve constar no contrato
+final `MacroTypes.h` da Parte 1. A saída/integração da Parte 5 também utiliza
+`MacroDiagnostic.where`, `MacroLine.originalText` e `MacroLine.operation`;
+esses nomes precisam permanecer coerentes entre as implementações. O uso de
+`MacroOutput.h` com estruturas provisórias e o *fallback* presente na fachada
+da Parte 5 servem à implementação isolada daquele colega: **não representam
+uma expansão de macros completa**. O Makefile desta parte exige o verdadeiro
+processador antes de liberar o executável.
+
+**Verificação feita com este ZIP:** `main.cpp` compilou isoladamente com
+`-std=c++17 -Wall -Wextra -Wpedantic`, e `make status`/`make` identificaram os
+módulos pendentes. Isso **não** equivale a um teste de integração ou à aprovação
+das macros aninhadas, que dependem das demais partes.
 
 ## Uso do executável
 
@@ -141,45 +154,41 @@ Os diagnósticos são impressos em `stderr` no formato `arquivo:linha: mensagem`
 Em caso de sucesso, a CLI mostra as macros definidas, as expansões realizadas,
 o arquivo expandido e o objeto gerado.
 
-## Contrato de integração pendente: Partes 1, 4, 5 e 6
+## Contrato real de integração: Partes 5 e 6
 
-A interface proposta no README da Parte 5 não fornece o caminho de `-o`, e
-os resultados propostos pelas Partes 1 e 4 não especificam as estatísticas
-solicitadas à CLI. **Antes de integrar, alinhar com os integrantes 4 e 5**
-o seguinte contrato público em `MacroAssemblerPipeline.h`:
+Em 13/11/2026, a Parte 5 publicou `include/MacroAssemblerPipeline.h` e
+`src/MacroAssemblerPipeline.cpp`. A assinatura pública está **compatível** com
+os três parâmetros enviados pelo `main.cpp`, incluindo a opção `-o`:
 
 ```cpp
-// Exemplo de contrato a ser combinado com a Parte 5:
-struct MacroAssemblerResult {
-    std::vector<MacroDiagnostic> macroDiagnostics;
-    std::vector<Diagnostic> assemblerDiagnostics;
-    std::size_t macrosDefined = 0;
-    std::size_t expansionsPerformed = 0;
-    bool success() const noexcept; // verdadeiro somente sem falhas
-};
-
 MacroAssemblerResult runMacroAssembler(
     const std::string& inputPath,
     const std::string& expandedPath = "MASMAPRG.ASM",
     const std::string& objectPath = "");
 ```
 
-Os erros devem conter `where.file`, `where.line` e `message`, como os tipos de
-diagnóstico do Checkpoint 2. O caminho vazio para objeto indica que a fachada
-pode aplicar um padrão quando usada fora da CLI; **a CLI sempre fornece o caminho
-resolvido**, inclusive quando `-o` é omitido. As contagens devem vir do motor de
-expansão (Parte 4), não ser estimadas pela CLI analisando o arquivo gerado.
+O resultado publicado contém `macroDiagnostics`, `assemblerDiagnostics`,
+`macrosDefined`, `expansionsPerformed` e `success()`, todos consumidos pela CLI.
+Também fornece `diagnostics` (com etapa de origem), `expandedPath`, `objectPath`
+e sinalizadores das fases de expansão, escrita e montagem. Os diagnósticos da
+CLI seguem `arquivo:linha: mensagem`, e a fachada acrescenta a etapa à mensagem.
 
-Esse código é uma **proposta de contrato**, não uma declaração de que a Parte 5
-já o implementou. Quando o arquivo real estiver disponível, os nomes dos campos
-precisam coincidir; caso haja um contrato definitivo diferente, ajustar apenas
-a comunicação na CLI após acordo com os responsáveis, sem editar seus módulos.
+**Ponto de atenção entre as Partes 1, 4 e 5:** a fachada tenta obter
+`macrosDefined` e `expansionsPerformed` do `MacroExpansionResult` e usa zero
+caso esses campos não existam. Para o resumo da CLI exibir contagens **reais**,
+o contrato final da Parte 1 e a implementação da Parte 4 precisam fornecê-las.
+Não é responsabilidade da CLI estimar esses valores lendo o arquivo gerado.
+
+A Parte 5 já possui uma rotina que recebe resultados expandidos em memória
+(`runMacroAssemblerFromExpandedResult`), útil para testes isolados. Entretanto,
+para validar o comando público `runMacroAssembler` de ponta a ponta, o parser,
+os contratos e o `MacroProcessor` precisam estar integrados de verdade.
 
 ## Testes e critérios de aceite
 
-1. `make status` mostra os dois arquivos do parser como presentes e indica os
-   módulos ainda ausentes; `make clean && make` termina sem warnings **após a
-   chegada das dependências e alinhamento das APIs**.
+1. `make status` mostra os arquivos do parser e da fachada/saída como presentes
+   e informa os oito arquivos obrigatórios ainda ausentes; `make clean && make`
+   termina sem warnings **após a chegada das dependências e alinhamento das APIs**.
 2. A entrada com macros gera o fonte expandido antes de iniciar o montador.
 3. Definições de macro não são enviadas ao montador como instruções assembly.
 4. O objeto produzido corresponde ao assembly expandido.
@@ -189,7 +198,9 @@ a comunicação na CLI após acordo com os responsáveis, sem editar seus módul
    aninhadas, chamadas aninhadas, redefinição, `.SER`, erros e integração real.
 
 Os requisitos 2–6 dependem da implementação dos demais módulos e não podem ser
-considerados validados apenas com testes isolados da CLI.
+considerados validados apenas com testes isolados da CLI. A disponibilidade
+da fachada da Parte 5 confirma a compatibilidade da assinatura, **não** o
+funcionamento completo do macroprocessador.
 
 ## Demonstração da Parte 6 no vídeo
 
