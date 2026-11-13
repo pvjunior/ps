@@ -10,6 +10,18 @@ EXEEXT   := $(if $(filter Windows_NT,$(OS)),.exe,)
 TARGET   := macro_assembler$(EXEEXT)
 TEST_BIN := build/test_macro_processor$(EXEEXT)
 
+# Os modulos sao entregues por integrantes diferentes. A lista explicita
+# permite identificar dependencias ausentes ANTES da compilacao. O wildcard
+# abaixo continua descobrindo automaticamente novos .cpp da etapa 3.
+REQUIRED_FILES := \
+    include/MacroTypes.h src/MacroTypes.cpp \
+    include/MacroParser.h src/MacroParser.cpp \
+    include/MacroTable.h src/MacroTable.cpp \
+    include/MacroArguments.h src/MacroArguments.cpp \
+    include/MacroProcessor.h src/MacroProcessor.cpp \
+    include/MacroOutput.h src/MacroOutput.cpp \
+    include/MacroAssemblerPipeline.h src/MacroAssemblerPipeline.cpp
+
 # Fontes proprios do Checkpoint 3: nao compilar o main do Checkpoint 2.
 LOCAL_SRC := main.cpp $(wildcard src/*.cpp)
 LOCAL_OBJ := $(patsubst %.cpp,build/%.o,$(LOCAL_SRC))
@@ -27,22 +39,39 @@ LIB_OBJ  := $(filter-out build/main.o,$(OBJECTS))
 TEST_SRC := $(wildcard tests/*.cpp)
 TEST_OBJ := $(patsubst %.cpp,build/%.o,$(TEST_SRC))
 
-.PHONY: all test smoke clean run check-integration
+.PHONY: all test smoke clean run check-integration status
 all: $(TARGET)
 
-# Sem a fachada real do integrante 5, nao finja que a expansao esta pronta.
+# Mostra o que cada integrante ja publicou, sem exigir a integracao completa.
+status:
+	@for f in $(REQUIRED_FILES); do \
+	    if [ -f "$$f" ]; then \
+	        printf 'OK       %s\n' "$$f"; \
+	    else \
+	        printf 'PENDENTE %s\n' "$$f"; \
+	    fi; \
+	done
+
+# Nao comeca um build parcial nem oculta um header ainda nao publicado.
+# A compatibilidade das assinaturas C++ sera validada quando todos chegarem.
 check-integration:
-	@if [ ! -f include/MacroAssemblerPipeline.h ] || \
-	    [ ! -f src/MacroAssemblerPipeline.cpp ]; then \
-		echo "ERRO: falta a fachada MacroAssemblerPipeline (integrante 5)." >&2; \
-		echo "A CLI esta preparada; combine a API indicada em README.md." >&2; \
-		exit 1; \
+	@missing=0; for f in $(REQUIRED_FILES); do \
+	    if [ ! -f "$$f" ]; then \
+	        echo "PENDENTE: $$f" >&2; \
+	        missing=1; \
+	    fi; \
+	done; \
+	if [ $$missing -ne 0 ]; then \
+	    echo "ERRO: falta integrar os modulos acima do Checkpoint 3." >&2; \
+	    echo "Use 'make status' para consultar os arquivos presentes." >&2; \
+	    exit 1; \
 	fi
+
+# Exigir a verificacao antes de QUALQUER objeto, inclusive com make -j.
+$(LOCAL_OBJ) $(ASM_OBJ) $(SIM_OBJ) $(TEST_OBJ): | check-integration
 
 $(TARGET): $(OBJECTS) | check-integration
 	$(CXX) $(CXXFLAGS) $(OBJECTS) -o $@
-
-build/main.o: | check-integration
 
 build/%.o: %.cpp
 	@mkdir -p $(dir $@)
