@@ -89,11 +89,11 @@ test: $(TEST_BIN) smoke
 	./$(TEST_BIN)
 else
 test: smoke
-	@echo "AVISO: tests/*.cpp ainda nao existe; executados apenas testes de CLI."
+	@echo "AVISO: tests/*.cpp ainda nao existe; executados testes basicos de CLI e integracao."
 endif
 
-# Testes de ponta a ponta com uma fonte sem macros (que deve passar inalterada).
-# O integrante 7 acrescentara os casos de macros simples/aninhadas/erros.
+# Testes minimos de CLI + pipeline (inclui uma macro simples).
+# Os testes detalhados de aninhamento, .SER e recursao pertencem a Parte 7.
 smoke: $(TARGET)
 	@mkdir -p build/smoke
 	@printf '%s\n' 'COPY START 1000' 'FIRST LDA #3' '      STA VALUE' \
@@ -103,6 +103,20 @@ smoke: $(TARGET)
 	@grep -q '^H' build/smoke/valid.obj
 	@grep -q '^T' build/smoke/valid.obj
 	@grep -q '^E' build/smoke/valid.obj
+	@printf '%s\n' 'COPY START 1000' '      MCDEFN' 'SOMAUM &NUM' \
+	    '      LDA &NUM' '      ADD #1' '      MCEND' \
+	    'FIRST SOMAUM #3' '      STA VALUE' 'VALUE RESW 1' \
+	    '      END FIRST' > build/smoke/macro.asm
+	@./$(TARGET) build/smoke/macro.asm -o build/smoke/macro.obj \
+	    --expanded build/smoke/macro_expanded.asm > build/smoke/macro.log
+	@grep -q 'Macros definidas: 1' build/smoke/macro.log
+	@grep -q 'Expansoes realizadas: 1' build/smoke/macro.log
+	@grep -q 'LDA #3' build/smoke/macro_expanded.asm
+	@grep -q 'ADD #1' build/smoke/macro_expanded.asm
+	@! grep -Eq 'MCDEFN|MCEND|SOMAUM' build/smoke/macro_expanded.asm
+	@grep -q '^H' build/smoke/macro.obj
+	@grep -q '^T' build/smoke/macro.obj
+	@grep -q '^E' build/smoke/macro.obj
 	@cp build/smoke/valid.obj build/smoke/old.obj
 	@printf '%s\n' 'BAD START 1000' '    LDA MISSING' '    END' \
 	    > build/smoke/invalid.asm
@@ -116,7 +130,7 @@ smoke: $(TARGET)
 	@status=0; ./$(TARGET) > build/smoke/usage.log 2>&1 || status=$$?; \
 	    if [ $$status -ne 2 ]; then \
 	        echo "ERRO: argumentos ausentes deveriam retornar codigo 2." >&2; exit 1; fi
-	@echo "Smoke tests: CLI, montagem, codigos de saida e objeto preservado: OK"
+	@echo "Smoke tests: CLI, macro simples, montagem, codigos de saida e objeto preservado: OK"
 
 run: $(TARGET)
 	@if [ -z "$(INPUT)" ]; then \
