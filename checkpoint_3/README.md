@@ -1,197 +1,150 @@
-# Checkpoint 3 — Processador de macros e macro-montador SIC/XE
+# Checkpoint 3 — Processador de Macros e Macro-montador SIC/XE
+ 
+**Linguagem:** C++17
 
-## Escopo e responsabilidade
+## Visão geral
 
-Esta parte fornece o ponto de entrada do macro-montador e o processo de compilação
-independente do Checkpoint 3. Ela não reimplementa o parser, a tabela de macros,
-a associação de argumentos, o expansor nem a montagem SIC/XE.
+Neste checkpoint, o projeto incorpora um **processador de macros em uma passagem** ao montador SIC/XE desenvolvido anteriormente. O usuário fornece um programa assembly que pode conter definições e chamadas de macros. O sistema interpreta essas macros, gera um **arquivo assembly expandido** e, em seguida, utiliza o montador do Checkpoint 2 para produzir o **programa objeto SIC/XE**.
 
-Arquivos sob responsabilidade do integrante 6:
+O objetivo é reutilizar o montador existente e manter separadas as responsabilidades de leitura, armazenamento, expansão, geração de arquivos e execução.
 
-- `checkpoint_3/main.cpp` — interpreta os argumentos da CLI, chama a fachada de
-  integração, apresenta diagnósticos e imprime o resumo da execução;
-- `checkpoint_3/Makefile` — compila o executável isolado do Checkpoint 3,
-  reaproveitando os módulos do Checkpoint 2, e disponibiliza testes básicos;
-- `checkpoint_3/README.md` — documenta compilação, execução e integração.
-
-A interface gráfica é uma contribuição opcional separada e **não está incluída
-nesta entrega**. A CLI não abre a TUI do simulador.
-
-## Fluxo do macro-montador
+## Fluxo de funcionamento
 
 ```text
-arquivo.asm
-    |
-    v
-main.cpp — Parte 6: interpreta as opções da CLI
-    |
-    v
-runMacroAssembler(...) — Parte 5: coordena as etapas
-    |
-    +--> Parser — Parte 2
-    |      |
-    |      v
-    |    Expansor em uma passagem — Parte 4
-    |    (contratos da Parte 1; tabela e argumentos da Parte 3)
-    |      |
-    |      v
-    +--> MASMAPRG.ASM (ou caminho definido por --expanded)
-              |
-              v
-      Montador SIC/XE existente — Checkpoint 2
-              |
-              v
-      programa.obj (ou caminho definido por -o)
+Programa fonte (.asm)
+         |
+         v
+CLI (main.cpp) — recebe entrada e opções
+         |
+         v
+Parser de macros — interpreta as linhas do fonte
+         |
+         v
+Processador de macros — definições, tabela, argumentos e expansão
+         |
+         v
+MASMAPRG.ASM — fonte assembly expandido
+         |
+         v
+Montador SIC/XE do Checkpoint 2 — Passagens 1 e 2
+         |
+         v
+Programa objeto (.obj)
 ```
 
-A CLI chama apenas a API pública `runMacroAssembler`, implementada pelo
-integrante 5. A expansão e a escrita do arquivo intermediário ocorrem antes
-da montagem. A CLI não duplica as regras de macros nem altera os módulos dos
-checkpoints anteriores.
+A fachada `runMacroAssembler`, em `MacroAssemblerPipeline`, coordena esse fluxo. Se ocorrer erro durante o processamento de macros, a montagem não deve ser iniciada. Os diagnósticos são exibidos com a localização do problema.
 
-## Estado de integração verificado (14/11/2026)
+## Organização do código
 
-No ZIP recebido com as Partes 1 a 5, os seguintes módulos estão presentes:
+| Arquivo ou módulo | Função no sistema |
+|---|---|
+| `include/MacroTypes.h` e `src/MacroTypes.cpp` | Tipos e contratos compartilhados, incluindo linhas, definições e diagnósticos. |
+| `include/MacroParser.h` e `src/MacroParser.cpp` | Leitura e interpretação do texto fonte. |
+| `include/MacroTable.h` e `src/MacroTable.cpp` | Armazenamento e consulta de definições de macros. |
+| `include/MacroArguments.h` e `src/MacroArguments.cpp` | Associação e substituição de parâmetros e argumentos. |
+| `include/MacroProcessor.h` e `src/MacroProcessor.cpp` | Expansão das macros em uma passagem, inclusive chamadas e definições aninhadas. |
+| `include/MacroOutput.h` e `src/MacroOutput.cpp` | Gravação do assembly expandido. |
+| `include/MacroAssemblerPipeline.h` e `src/MacroAssemblerPipeline.cpp` | Integração entre processamento de macros e montagem SIC/XE. |
+| `main.cpp` | Interface de linha de comando (CLI), validação de opções e exibição de resultados. |
+| `Makefile` | Compilação, execução e testes do Checkpoint 3. |
 
-| Parte | Módulo | Situação |
-|---|---|---|
-| 1 | `MacroTypes.h` e `MacroTypes.cpp` | Presente |
-| 2 | `MacroParser.h` e `MacroParser.cpp` | Presente |
-| 3 | `MacroTable` e `MacroArguments` (`.h`/`.cpp`) | Presente |
-| 4 | `MacroProcessor.h` e `MacroProcessor.cpp` | Presente |
-| 5 | `MacroOutput` e `MacroAssemblerPipeline` (`.h`/`.cpp`) | Presente |
-| 6 | `main.cpp`, `Makefile` e este `README.md` | Presente |
-| 7 | Testes e exemplos próprios do integrante 7 | Ainda não presentes no ZIP recebido |
+Os arquivos de implementação estão em `checkpoint_3/src/`, os cabeçalhos públicos em `checkpoint_3/include/`. A montagem aproveita os arquivos de `checkpoint_2/`, sem alterar o fluxo do simulador de interface de terminal dos checkpoints anteriores.
 
-**Verificação realizada com esses módulos:** `make clean && make` compilou
-sem warnings, e `make test` passou nos testes básicos de CLI e integração
-(incluindo expansão de uma macro simples até o objeto SIC/XE). Os testes
-existentes do Checkpoint 2 haviam sido aprovados na integração anterior.
-A suíte completa do integrante 7, quando publicada, deverá ser executada
-separadamente pela mesma meta `make test`.
+## Recursos principais
 
-**Limitação conhecida fora da Parte 6:** em um caso com rótulo na chamada da
-macro e outro rótulo já presente na primeira instrução expandida, o expansor
-da Parte 4 pode gerar um rótulo isolado no fonte intermediário, causando erro
-na montagem. Isso não foi corrigido por este pacote; deve ser verificado
-pelo integrante 4 e coberto pelos testes do integrante 7. Portanto, o sucesso
-da compilação e dos testes básicos não prova que todos os cenários de macro
-estejam livres de falhas.
+- Definições delimitadas por **`MCDEFN`** e **`MCEND`**.
+- Chamadas de macro substituídas por instruções assembly no ponto da chamada.
+- Parâmetros posicionais e nomeados, com tratamento de valores padrão.
+- Definições e chamadas aninhadas, inclusive controle de nível de definição.
+- Redefinição de macros e substituição de **`.SER`** para distinguir rótulos internos de expansões diferentes.
+- Diagnósticos para problemas de sintaxe, argumentos e expansão, com proteção contra recursão de macros sem término.
+- Geração do arquivo intermediário **`MASMAPRG.ASM`** e do arquivo objeto **`.obj`**.
 
-## Requisitos
+## Compilação e execução
 
-- Compilador `g++` com suporte a C++17;
-- GNU Make e shell compatível com os comandos do Makefile;
-- Linux ou Windows com MSYS2 (recomendado: terminal UCRT64);
-- Nenhuma biblioteca externa adicional.
+**Pré-requisitos:** `g++` com suporte a C++17 e GNU Make. Em Windows, utilizar um terminal do MSYS2 (por exemplo, UCRT64). Não são necessárias bibliotecas externas adicionais.
 
-O Makefile usa `-std=c++17 -Wall -Wextra -Wpedantic`, grava arquivos de
-compilação em `checkpoint_3/build/` e gera `macro_assembler` (ou
-`macro_assembler.exe` no Windows). Os headers do montador anterior são
-localizados com `-I../checkpoint_2/include`, como solicitado na integração.
-O Makefile exclui o `main.cpp` do Checkpoint 2 e não compila `TerminalUI.cpp`.
-
-## Compilar e testar
-
-Abra o terminal na pasta `checkpoint_3` e execute:
+Abra um terminal na pasta `checkpoint_3` e execute:
 
 ```bash
-make status
 make clean
 make
 make test
 ```
 
-- `make status`: lista a presença de arquivos obrigatórios dos módulos;
-- `make`: compila o executável do Checkpoint 3;
-- `make test`: executa os testes C++ da pasta `tests/`, caso existam, e os
-  testes básicos de integração da Parte 6;
-- `make clean`: remove o executável e os artefatos da pasta `build/`;
-- `make run INPUT=arquivo.asm`: compila (se necessário) e executa o macro-montador.
+O comando `make` produz `macro_assembler` (`macro_assembler.exe` no Windows). Os arquivos intermediários de compilação ficam em `build/`.
 
-Os testes básicos (*smoke tests*) verificam: fonte assembly sem macro,
-macro simples com `MCDEFN`/`MCEND`, geração de programa objeto, opções
-`-o`/`--expanded`, código de saída 1 para erro de montagem, código 2 para
-argumentos ausentes e preservação do objeto anterior após uma falha.
-O Makefile cria `build/smoke/macro.asm` durante `make test`, fornecendo uma
-entrada reproduzível para a demonstração.
-
-## Utilização da CLI
+A sintaxe de uso é:
 
 ```text
 ./macro_assembler <entrada.asm> [-o programa.obj] [--expanded caminho]
 ```
 
-- `entrada.asm`: arquivo fonte original;
-- `-o`: caminho do objeto SIC/XE; sem a opção, usa o nome do fonte com `.obj`;
-- `--expanded`: caminho do assembly expandido; o padrão é `MASMAPRG.ASM`.
+- **`entrada.asm`**: caminho do programa assembly original;
+- **`-o`**: nome ou caminho do objeto gerado; por padrão, utiliza o nome do fonte com extensão `.obj`;
+- **`--expanded`**: nome ou caminho do fonte expandido; por padrão, `MASMAPRG.ASM`.
 
-Exemplos, após `make test`:
+Por exemplo, após `make test`, é possível executar o exemplo de macro criado pelos testes básicos:
 
 ```bash
-./macro_assembler build/smoke/macro.asm
 ./macro_assembler build/smoke/macro.asm -o build/smoke/demo.obj --expanded build/smoke/demo_expandido.asm
-make run INPUT=build/smoke/macro.asm ARGS='-o build/smoke/programa.obj'
 ```
 
-A CLI rejeita argumentos duplicados, opções inválidas e caminhos de saída
-que coincidam com o fonte ou com a outra saída. Os diagnósticos são
-apresentados em `stderr` como `arquivo:linha: mensagem`.
+No Windows/MSYS2, use `./macro_assembler.exe` se necessário. Também estão disponíveis `make run INPUT=arquivo.asm`, `make status` e `make clean`.
 
-| Código de retorno | Significado |
+## Exemplo de expansão
+
+**Fonte original:**
+
+```asm
+COPY START 1000
+      MCDEFN
+SOMAUM &NUM
+      LDA &NUM
+      ADD #1
+      MCEND
+FIRST SOMAUM #3
+      STA VALUE
+VALUE RESW 1
+      END FIRST
+```
+
+**Fonte após o processamento de macros:**
+
+```asm
+COPY START 1000
+FIRST LDA #3
+      ADD #1
+      STA VALUE
+VALUE RESW 1
+      END FIRST
+```
+
+Nesse exemplo, a chamada `SOMAUM #3` é substituída pelas instruções `LDA #3` e `ADD #1`. As diretivas de definição não são passadas ao montador. O assembly expandido pode então ser transformado em registros de programa objeto SIC/XE.
+
+## Testes e tratamento de erros
+
+`make test` executa os testes C++ disponíveis na pasta `tests/`, quando presentes, e os testes básicos de integração definidos no `Makefile`. Esses testes básicos incluem execução sem macros, expansão simples, geração de objeto, parâmetros inválidos da CLI, retorno de erro de montagem e preservação de um objeto anterior quando a montagem falha.
+
+A CLI utiliza os seguintes códigos de retorno:
+
+| Código | Significado |
 |---|---|
-| `0` | Macroprocessamento e montagem concluídos |
-| `1` | Erro de processamento, leitura, saída ou montagem |
-| `2` | Parâmetros ausentes ou inválidos |
+| `0` | Processamento e montagem concluídos. |
+| `1` | Falha de leitura, expansão, gravação ou montagem. |
+| `2` | Argumentos da linha de comando ausentes ou inválidos. |
 
-Em caso de sucesso, são impressos a quantidade de macros definidas, a
-quantidade de expansões realizadas e os caminhos dos dois arquivos gerados.
-As estatísticas são fornecidas pela fachada e pelo expansor, não contadas
-pela CLI por interpretação do arquivo intermediário.
+Em caso de sucesso, a saída informa a quantidade de macros definidas, a quantidade de expansões executadas e os caminhos dos arquivos gerados. Em caso de erro, os diagnósticos indicam arquivo, linha e mensagem.
 
-## Contrato com a Parte 5
+## Equipe e divisão do trabalho
 
-A fachada publicada pelo integrante 5 disponibiliza:
+| Integrante | Responsabilidade |
+|---|---|
+| Pablo Vicondo | Parte 1 — Tipos e contratos compartilhados |
+| Vinícius Lameirão | Parte 2 — Parser de macros |
+| Samuel Bottermund Flores | Parte 3 — Tabela e argumentos |
+| Nickolas Werhli Barbosa | Parte 4 — Processador e expansão em uma passagem |
+| Dionathan Liermann Kringel | Parte 5 — Saída expandida e integração com o montador |
+| Gabriel M. Meireles | Parte 6 — Módulo principal, CLI e Makefile |
+| Pedro Paulo Moreira | Parte 7 — Testes e exemplos |
 
-```cpp
-MacroAssemblerResult runMacroAssembler(
-    const std::string& inputPath,
-    const std::string& expandedPath = "MASMAPRG.ASM",
-    const std::string& objectPath = "");
-```
-
-O `main.cpp` consome `success()`, `macroDiagnostics`,
-`assemblerDiagnostics`, `macrosDefined` e `expansionsPerformed`. A chamada
-com os três argumentos permite respeitar `-o` e `--expanded`, sem alterar
-nenhum módulo de processamento dos demais integrantes.
-
-## Demonstração curta para o vídeo
-
-Na pasta `checkpoint_3`, antes da gravação, execute `make clean`, `make` e
-`make test`, confirmando que tudo termina normalmente. Durante a gravação,
-abra `main.cpp` e `Makefile` e mostre:
-
-```bash
-cat build/smoke/macro.asm
-./macro_assembler build/smoke/macro.asm -o build/smoke/demo.obj --expanded build/smoke/demo_expandido.asm
-cat build/smoke/demo_expandido.asm
-cat build/smoke/demo.obj
-```
-
-Explique que a Parte 6 recebe os argumentos, chama a fachada da Parte 5,
-apresenta os diagnósticos e informa os resultados, enquanto as regras de
-expansão e montagem pertencem aos colegas. No Windows/MSYS2, também é
-possível executar `./macro_assembler.exe`.
-
-**Não envie** `build/`, executáveis compilados nem arquivos `.asm`/`.obj`
-gerados durante os testes. São artefatos locais, não código-fonte.
-
-## Equipe e divisão das partes
-
-- Pablo Vicondo — Parte 1: contratos e tipos compartilhados;
-- Vinícius Lameirão — Parte 2: parser de macros;
-- Samuel Bottermund Flores — Parte 3: tabela e argumentos;
-- Nickolas Werhli Barbosa — Parte 4: expansor em uma passagem;
-- Dionathan Liermann Kringel — Parte 5: saída e integração;
-- Gabriel M. Meireles — Parte 6: módulo principal, CLI e Makefile;
-- Pedro Paulo Moreira — Parte 7: testes e exemplos.
