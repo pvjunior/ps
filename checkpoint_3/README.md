@@ -1,8 +1,5 @@
 # Checkpoint 3 — Processador de macros e macro-montador SIC/XE
 
-**Integrante 6 — Módulo principal, interface de linha de comando (CLI) e build**  
-**Disciplina:** Programação de Sistemas — UFPel (2026/2)
-
 ## Escopo e responsabilidade
 
 Esta parte fornece o ponto de entrada do macro-montador e o processo de compilação
