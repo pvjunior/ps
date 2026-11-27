@@ -39,6 +39,14 @@ void Machine::reset() {
     steps = 0;
 }
 
+bool Machine::setPC(uint32_t addr) {
+    if (mem.size() <= 0 || addr >= static_cast<uint32_t>(mem.size()) || addr > 0xFFFFFFu) {
+        return false;
+    }
+    regs.set(8, addr);
+    return true;
+}
+
 Loader& Machine::loader() { return ldr; }
 
 // ---------- observers: registers ----------
