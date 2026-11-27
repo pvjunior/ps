@@ -1,5 +1,5 @@
 # Checkpoint 3 — Processador de Macros e Macro-montador SIC/XE
- 
+
 **Linguagem:** C++17
 
 ## Visão geral
@@ -32,7 +32,7 @@ Montador SIC/XE do Checkpoint 2 — Passagens 1 e 2
 Programa objeto (.obj)
 ```
 
-A fachada `runMacroAssembler`, em `MacroAssemblerPipeline`, coordena esse fluxo. Se ocorrer erro durante o processamento de macros, a montagem não deve ser iniciada. Os diagnósticos são exibidos com a localização do problema.
+A fachada `runMacroAssembler`, em `MacroAssemblerPipeline`, coordena esse fluxo. Se ocorrer erro durante o processamento de macros, a montagem não deve ser iniciada. Os diagnósticos são exibidos com a localização do problema. O montador só é acionado após a gravação bem-sucedida do fonte expandido. Se a expansão falhar, o fonte expandido anterior é preservado; se a montagem falhar, o objeto anterior é preservado.
 
 ## Organização do código
 
@@ -47,8 +47,9 @@ A fachada `runMacroAssembler`, em `MacroAssemblerPipeline`, coordena esse fluxo.
 | `include/MacroAssemblerPipeline.h` e `src/MacroAssemblerPipeline.cpp` | Integração entre processamento de macros e montagem SIC/XE. |
 | `main.cpp` | Interface de linha de comando (CLI), validação de opções e exibição de resultados. |
 | `Makefile` | Compilação, execução e testes do Checkpoint 3. |
+| `tests/*.cpp` | Caminho utilizado pelo Makefile para localizar os testes C++ dos módulos e da integração. |
 
-Os arquivos de implementação estão em `checkpoint_3/src/`, os cabeçalhos públicos em `checkpoint_3/include/`. A montagem aproveita os arquivos de `checkpoint_2/`, sem alterar o fluxo do simulador de interface de terminal dos checkpoints anteriores.
+Os arquivos de implementação estão em `checkpoint_3/src/`, os cabeçalhos públicos em `checkpoint_3/include/`. A montagem reaproveita os módulos de `checkpoint_2/`, sem executar a interface de terminal do simulador.
 
 ## Recursos principais
 
@@ -84,7 +85,7 @@ A sintaxe de uso é:
 - **`-o`**: nome ou caminho do objeto gerado; por padrão, utiliza o nome do fonte com extensão `.obj`;
 - **`--expanded`**: nome ou caminho do fonte expandido; por padrão, `MASMAPRG.ASM`.
 
-Por exemplo, após `make test`, é possível executar o exemplo de macro criado pelos testes básicos:
+Por exemplo, após `make test` (ou `make smoke`), é possível executar o exemplo de macro criado pelos testes básicos:
 
 ```bash
 ./macro_assembler build/smoke/macro.asm -o build/smoke/demo.obj --expanded build/smoke/demo_expandido.asm
@@ -120,11 +121,91 @@ VALUE RESW 1
       END FIRST
 ```
 
-Nesse exemplo, a chamada `SOMAUM #3` é substituída pelas instruções `LDA #3` e `ADD #1`. As diretivas de definição não são passadas ao montador. O assembly expandido pode então ser transformado em registros de programa objeto SIC/XE.
+Nesse exemplo, a chamada `SOMAUM #3` é substituída pelas instruções `LDA #3` e `ADD #1`. O argumento `#3` ocupa o lugar do parâmetro formal `&NUM`, e o rótulo `FIRST` é associado à primeira instrução expandida. As diretivas de definição não são passadas ao montador. O assembly expandido pode então ser transformado em registros de programa objeto SIC/XE.
+
+Para conferir o resultado do comando de demonstração da seção anterior, execute:
+
+```bash
+cat build/smoke/demo_expandido.asm
+cat build/smoke/demo.obj
+```
+
+O primeiro comando mostra o fonte após a expansão; o segundo apresenta o programa objeto. Para esse exemplo, o objeto esperado é:
+
+```text
+HCOPY  00100000000C
+T001000090100031900010F2000
+E001000
+```
+
+- `H` (Header): identifica o programa, seu endereço inicial e seu tamanho.
+- `T` (Text): contém o endereço, o tamanho e os bytes das instruções e dos dados gerados.
+- `E` (End): informa o endereço de entrada do programa.
+
+O formato também admite registros `M` (Modification), utilizados quando a montagem identifica campos que precisam ser ajustados na relocação.
 
 ## Testes e tratamento de erros
 
-`make test` executa os testes C++ disponíveis na pasta `tests/`, quando presentes, e os testes básicos de integração definidos no `Makefile`. Esses testes básicos incluem execução sem macros, expansão simples, geração de objeto, parâmetros inválidos da CLI, retorno de erro de montagem e preservação de um objeto anterior quando a montagem falha.
+### Testes automatizados
+
+```bash
+make test
+```
+
+Esse comando executa os testes básicos de integração (*smoke tests*) definidos no Makefile e compila e executa os arquivos de teste C++ encontrados em `tests/`, quando disponíveis. Os testes C++ são vinculados aos módulos do projeto sem incluir o `main.cpp` da CLI.
+
+Para executar somente os testes básicos de integração:
+
+```bash
+make smoke
+```
+
+Os testes básicos verificam:
+
+- montagem de um fonte sem macros;
+- definição e expansão de uma macro simples;
+- substituição dos parâmetros e remoção das diretivas de macro do fonte expandido;
+- geração dos registros `H`, `T` e `E` do programa objeto;
+- códigos de retorno para argumentos ausentes e erros de montagem;
+- preservação de um arquivo objeto anterior quando a montagem falha.
+
+Os exemplos e arquivos de saída desses testes são gerados em `build/smoke/`. A mensagem final `Smoke tests: CLI, macro simples, montagem, codigos de saida e objeto preservado: OK` indica que as verificações básicas foram aprovadas.
+
+### Roteiro de validação dos recursos
+
+Além dos testes básicos, os seguintes cenários permitem avaliar os módulos individualmente e o fluxo completo do macro-montador:
+
+| Cenário | Comportamento a verificar |
+|---|---|
+| Leitura e parser | Separação de rótulo, operação, operandos e comentário; localização dos diagnósticos. |
+| Tabela de macros | Registro, consulta e redefinição de macros. |
+| Parâmetros e argumentos | Associação de argumentos posicionais e nomeados, valores padrão e substituição dos parâmetros. |
+| Expansão simples e aninhada | Substituição das chamadas por instruções, inclusive chamadas e definições aninhadas. |
+| Rótulos com `.SER` | Geração de rótulos distintos para expansões diferentes. |
+| Entradas inválidas | Diagnósticos para erros de definição, argumentos ou ciclos de chamadas. |
+| Integração com o montador | Geração do fonte expandido antes do objeto e preservação das saídas anteriores em caso de falha na etapa correspondente. |
+
+Para testar manualmente outros cenários, salve o código assembly em um arquivo `.asm`, execute o macro-montador e compare o fonte expandido e o arquivo objeto com os resultados esperados.
+
+### Testes manuais de erro
+
+Após executar `make test`, é possível reutilizar o exemplo inválido gerado pelo Makefile:
+
+```bash
+./macro_assembler build/smoke/invalid.asm -o build/smoke/erro.obj --expanded build/smoke/erro_expandido.asm
+echo $?
+```
+
+O fonte contém uma referência a um símbolo não definido (`MISSING`), portanto a montagem deve falhar, apresentar um diagnóstico e retornar `1`.
+
+Para verificar o tratamento de argumentos ausentes:
+
+```bash
+./macro_assembler
+echo $?
+```
+
+A CLI deve apresentar a sintaxe de uso e retornar `2`. O comando `echo $?` exibe o código de retorno do último comando executado no terminal (Bash/MSYS2).
 
 A CLI utiliza os seguintes códigos de retorno:
 
@@ -136,15 +217,13 @@ A CLI utiliza os seguintes códigos de retorno:
 
 Em caso de sucesso, a saída informa a quantidade de macros definidas, a quantidade de expansões executadas e os caminhos dos arquivos gerados. Em caso de erro, os diagnósticos indicam arquivo, linha e mensagem.
 
-## Equipe e divisão do trabalho
+## Comandos disponíveis no Makefile
 
-| Integrante | Responsabilidade |
+| Comando | Finalidade |
 |---|---|
-| Pablo Vicondo | Parte 1 — Tipos e contratos compartilhados |
-| Vinícius Lameirão | Parte 2 — Parser de macros |
-| Samuel Bottermund Flores | Parte 3 — Tabela e argumentos |
-| Nickolas Werhli Barbosa | Parte 4 — Processador e expansão em uma passagem |
-| Dionathan Liermann Kringel | Parte 5 — Saída expandida e integração com o montador |
-| Gabriel M. Meireles | Parte 6 — Módulo principal, CLI e Makefile |
-| Pedro Paulo Moreira | Parte 7 — Testes e exemplos |
-
+| `make` | Compilar o macro-montador. |
+| `make test` | Executar os testes de integração e os testes C++ encontrados em `tests/`. |
+| `make smoke` | Executar somente os testes básicos de integração. |
+| `make run INPUT=arquivo.asm` | Executar o macro-montador com o fonte informado. |
+| `make status` | Conferir os arquivos de implementação necessários à compilação. |
+| `make clean` | Remover o executável e os arquivos gerados na pasta `build/`. |
