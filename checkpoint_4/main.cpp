@@ -1,129 +1,125 @@
-// Checkpoint 3 - Modulo principal e CLI (integrante 6).
-// A logica de macros e montagem pertence a fachada do integrante 5.
-// Contrato esperado: consultar checkpoint_3/README.md (acordo entre integrantes 5 e 6).
+// Checkpoint 4 - Interface de terminal do carregador SIC/XE.
+// A leitura, validacao, relocacao e escrita pertencem ao ObjectLoader.
+#include "ObjectLoader.h"
+#include "LoaderTypes.h"
+#include "Machine.h"
 
-#include "MacroAssemblerPipeline.h"
-
+#include <charconv>
+#include <cstdint>
 #include <exception>
-#include <filesystem>
+#include <iomanip>
 #include <iostream>
+#include <optional>
+#include <sstream>
 #include <string>
+#include <string_view>
 #include <system_error>
+#include <vector>
 
 namespace {
 
+constexpr int MEMORY_SIZE = 1 << 20; // 1 MiB: espaco de enderecamento SIC/XE.
+constexpr std::uint32_t MAX_OBJECT_ADDRESS = 0xFFFFFF;
+
 struct CliOptions {
-    std::filesystem::path input;
-    std::filesystem::path object;
-    std::filesystem::path expanded = "MASMAPRG.ASM";
+    std::string path;
+    std::optional<std::uint32_t> base;
 };
 
-void printUsage(const char* executable) {
-    std::cerr << "Uso: " << executable
-              << " <entrada.asm> [-o programa.obj] [--expanded caminho]\n";
+void printUsage(std::ostream& out, const char* executable) {
+    out << "Uso: " << executable << " programa.obj [--load-address HEX]\n"
+        << "Sem --load-address, utiliza o endereco original do registro H.\n";
 }
 
-// Compara os caminhos normalizados, incluindo equivalencias como ./a.asm e a.asm.
-bool samePath(const std::filesystem::path& first,
-              const std::filesystem::path& second) {
-    std::error_code error;
-    const auto firstAbsolute = std::filesystem::absolute(first, error);
-    if (error) return false;
-    const auto secondAbsolute = std::filesystem::absolute(second, error);
-    if (error) return false;
-    return firstAbsolute.lexically_normal() == secondAbsolute.lexically_normal();
+// Aceita hexadecimal puro ou com prefixo 0x; rejeita sinais, lixo e estouro.
+bool parseHexAddress(std::string_view text, std::uint32_t& value) {
+    if (text.size() >= 2 && text[0] == '0' &&
+        (text[1] == 'x' || text[1] == 'X')) {
+        text.remove_prefix(2);
+    }
+    if (text.empty()) return false;
+    const auto end = text.data() + text.size();
+    const auto result = std::from_chars(text.data(), end, value, 16);
+    return result.ec == std::errc{} && result.ptr == end &&
+           value <= MAX_OBJECT_ADDRESS;
 }
 
 bool parseArguments(int argc, char* argv[], CliOptions& options) {
-    bool hasInput = false;
-    bool hasObject = false;
-    bool hasExpanded = false;
-
-    for (int i = 1; i < argc; ++i) {
-        const std::string argument = argv[i];
-
-        if (argument == "-o" || argument == "--expanded") {
-            const bool isObject = argument == "-o";
-            if ((isObject && hasObject) || (!isObject && hasExpanded) ||
-                i + 1 >= argc) {
-                return false;
-            }
-            const std::string value = argv[++i];
-            if (value.empty() || value[0] == '-') return false;
-
-            if (isObject) {
-                options.object = value;
-                hasObject = true;
-            } else {
-                options.expanded = value;
-                hasExpanded = true;
-            }
-        } else if (argument.empty() || argument[0] == '-' || hasInput) {
-            return false;
-        } else {
-            options.input = argument;
-            hasInput = true;
-        }
+    if (argc != 2 && argc != 4) return false;
+    options.path = argv[1];
+    if (options.path.empty() || options.path.front() == '-') return false;
+    if (argc == 4) {
+        std::uint32_t address = 0;
+        if (std::string_view(argv[2]) != "--load-address" ||
+            !parseHexAddress(argv[3], address)) return false;
+        // A faixa real da memoria e validada pela fachada, nao pela CLI.
+        options.base = address;
     }
-
-    if (!hasInput) return false;
-    if (!hasObject) {
-        options.object = options.input;
-        options.object.replace_extension(".obj");
-    }
-
-    // Nunca permita que uma saida sobrescreva o fonte ou a outra saida.
-    return !samePath(options.input, options.expanded) &&
-           !samePath(options.input, options.object) &&
-           !samePath(options.expanded, options.object);
+    return true;
 }
 
-template <typename Diagnostics>
-void printDiagnostics(const Diagnostics& diagnostics) {
+std::string hexAddress(std::uint32_t address) {
+    std::ostringstream out;
+    out << "0x" << std::uppercase << std::hex << std::setw(6)
+        << std::setfill('0') << address;
+    return out.str();
+}
+
+void printDiagnostics(const std::vector<LoaderDiagnostic>& diagnostics) {
     for (const auto& diagnostic : diagnostics) {
-        const std::string file = diagnostic.where.file.empty()
-                                     ? "<desconhecido>" : diagnostic.where.file;
-        std::cerr << file << ':' << diagnostic.where.line << ": "
-                  << diagnostic.message << '\n';
+        std::cerr << (diagnostic.where.file.empty() ? "<desconhecido>"
+                                                    : diagnostic.where.file);
+        if (diagnostic.where.line != 0) std::cerr << ':' << diagnostic.where.line;
+        std::cerr << ": " << diagnostic.message << '\n';
+        if (!diagnostic.originalText.empty()) {
+            std::cerr << "  " << diagnostic.originalText << '\n';
+        }
     }
+}
+
+// Ponto de adaptacao ao contrato da Parte 5. Os nomes dos campos abaixo
+// sao propostos para o teste com a fachada simulada.
+int runLoader(const CliOptions& options) {
+    Machine machine(MEMORY_SIZE);
+    const auto result = loadObject(options.path, machine, options.base);
+    printDiagnostics(result.diagnostics);
+    if (!result.success()) {
+        std::cerr << "ERRO: carregamento nao concluido.\n";
+        return 1;
+    }
+
+    std::cout << "Programa carregado com sucesso.\n"
+              << "Base de carga: " << hexAddress(result.baseAddress) << '\n'
+              << "Bytes carregados: " << result.bytesLoaded << '\n'
+              << "Endereco de entrada: ";
+    if (result.executionAddress) {
+        std::cout << hexAddress(*result.executionAddress);
+    } else {
+        std::cout << "nao informado";
+    }
+    // Consulta o PC real da maquina; nao calcula nem altera o registrador.
+    std::cout << "\nPC final: " << hexAddress(machine.getRegisters().PC) << '\n';
+    return 0;
 }
 
 } // namespace
 
 int main(int argc, char* argv[]) {
+    if (argc == 2 && (std::string_view(argv[1]) == "--help" ||
+                      std::string_view(argv[1]) == "-h")) {
+        printUsage(std::cout, argv[0]);
+        return 0;
+    }
     CliOptions options;
     if (!parseArguments(argc, argv, options)) {
-        printUsage(argv[0]);
+        std::cerr << "ERRO: argumentos invalidos.\n";
+        printUsage(std::cerr, argv[0]);
         return 2;
     }
-
-    // A fachada do integrante 5 implementa esta sequencia, sem abrir TUI:
-    // 1. Ler o fonte; 2. processar macros; 3. gravar MASMAPRG.ASM;
-    // 4. executar parser, passagem 1, passagem 2 e geracao do objeto SIC/XE.
     try {
-        const MacroAssemblerResult result = runMacroAssembler(
-            options.input.string(), options.expanded.string(),
-            options.object.string());
-
-        printDiagnostics(result.macroDiagnostics);
-        printDiagnostics(result.assemblerDiagnostics);
-        if (!result.success()) return 1;
-
-        std::cout << "[OK] Macro-montagem concluida.\n"
-                  << "--------------------------------\n"
-                  << "Macros definidas: " << result.macrosDefined << '\n'
-                  << "Expansoes realizadas: " << result.expansionsPerformed << '\n'
-                  << "Fonte expandido: " << options.expanded.string() << '\n'
-                  << "Arquivo objeto: " << options.object.string() << '\n';
-        return 0;
+        return runLoader(options);
     } catch (const std::exception& error) {
-        // A fachada deve retornar diagnosticos, mas uma excecao nao pode
-        // derrubar a CLI sem explicar a falha ao usuario.
-        std::cerr << options.input.string() << ":0: " << error.what() << '\n';
-        return 1;
-    } catch (...) {
-        std::cerr << options.input.string()
-                  << ":0: falha inesperada no macro-montador\n";
+        std::cerr << "ERRO: " << error.what() << '\n';
         return 1;
     }
 }

@@ -1,144 +1,101 @@
-# Checkpoint 3 - Macro-montador SIC/XE (integrante 6).
-# Compilacao isolada, reutilizando as APIs do montador do Checkpoint 2.
+# Checkpoint 4 - Carregador SIC/XE (integrante 6).
 CXX      ?= g++
-CXXFLAGS ?= -std=c++17 -Wall -Wextra -Wpedantic -O2
-CPPFLAGS += -Iinclude -I../checkpoint_2/include -I../checkpoint_2/structures/include
+CXXFLAGS ?= -Wall -Wextra -Wpedantic -O2
+CXXFLAGS += -std=c++17
 DEPFLAGS := -MMD -MP
+.DEFAULT_GOAL := all
 
-# Em Windows/MSYS2, o executavel fisico recebe extensao .exe.
+# Reutiliza o nucleo do simulador, sem o main nem a interface de terminal.
+# SIM_DIR pode ser redefinido caso a equipe centralize a API em outro checkpoint.
+SIM_DIR  ?= ../checkpoint_1/structures
+CPPFLAGS += -Iinclude -I$(SIM_DIR)/include
 EXEEXT   := $(if $(filter Windows_NT,$(OS)),.exe,)
-TARGET   := macro_assembler$(EXEEXT)
-TEST_BIN := build/test_macro_processor$(EXEEXT)
+TARGET   := object_loader$(EXEEXT)
+TEST_BIN := build/test_object_loader$(EXEEXT)
 
-# Os modulos sao entregues por integrantes diferentes. A lista explicita
-# permite identificar dependencias ausentes ANTES da compilacao. O wildcard
-# abaixo continua descobrindo automaticamente novos .cpp da etapa 3.
-REQUIRED_FILES := \
-    include/MacroTypes.h src/MacroTypes.cpp \
-    include/MacroParser.h src/MacroParser.cpp \
-    include/MacroTable.h src/MacroTable.cpp \
-    include/MacroArguments.h src/MacroArguments.cpp \
-    include/MacroProcessor.h src/MacroProcessor.cpp \
-    include/MacroOutput.h src/MacroOutput.cpp \
-    include/MacroAssemblerPipeline.h src/MacroAssemblerPipeline.cpp
+# Lista explicita: nao incorpora as copias dos modulos de macros do CP3.
+LOADER_MODULES := ObjectParser LoadPlanner Relocator ObjectLoader
+LOADER_SRC := $(addprefix src/,$(addsuffix .cpp,$(LOADER_MODULES)))
+SIM_MODULES := CPU Loader Machine Memory Registers
+SIM_SRC := $(addprefix $(SIM_DIR)/src/,$(addsuffix .cpp,$(SIM_MODULES)))
+REQUIRED_FILES := include/LoaderTypes.h \
+    $(addprefix include/,$(addsuffix .h,$(LOADER_MODULES))) $(LOADER_SRC) \
+    $(addprefix $(SIM_DIR)/include/,$(addsuffix .h,$(SIM_MODULES))) $(SIM_SRC)
 
-# Fontes proprios do Checkpoint 3: nao compilar o main do Checkpoint 2.
-LOCAL_SRC := main.cpp $(wildcard src/*.cpp)
-LOCAL_OBJ := $(patsubst %.cpp,build/%.o,$(LOCAL_SRC))
-
-# Reaproveita o montador existente sem editar/copy-paste de seus modulos.
-ASM_SRC  := $(wildcard ../checkpoint_2/src/*.cpp)
-ASM_OBJ  := $(patsubst ../checkpoint_2/%.cpp,build/checkpoint_2/%.o,$(ASM_SRC))
-
-# SimulatorBridge.cpp depende do nucleo da Machine; nao incluir TerminalUI.cpp.
-SIM_SRC  := $(addprefix ../checkpoint_2/structures/src/,CPU.cpp Loader.cpp Machine.cpp Memory.cpp Registers.cpp)
-SIM_OBJ  := $(patsubst ../checkpoint_2/%.cpp,build/checkpoint_2/%.o,$(SIM_SRC))
-
-OBJECTS  := $(LOCAL_OBJ) $(ASM_OBJ) $(SIM_OBJ)
-LIB_OBJ  := $(filter-out build/main.o,$(OBJECTS))
-TEST_SRC := $(wildcard tests/*.cpp)
+LOCAL_OBJ := build/main.o $(patsubst %.cpp,build/%.o,$(LOADER_SRC))
+SIM_OBJ := $(addprefix build/simulator/,$(addsuffix .o,$(SIM_MODULES)))
+OBJECTS := $(LOCAL_OBJ) $(SIM_OBJ)
+LIB_OBJ := $(filter-out build/main.o,$(OBJECTS))
+TEST_SRC := $(wildcard tests/test_object_loader.cpp)
 TEST_OBJ := $(patsubst %.cpp,build/%.o,$(TEST_SRC))
 
-.PHONY: all test smoke clean run check-integration status
+.PHONY: all status check-integration test smoke clean
 all: $(TARGET)
 
-# Mostra o que cada integrante ja publicou, sem exigir a integracao completa.
 status:
 	@for f in $(REQUIRED_FILES); do \
-	    if [ -f "$$f" ]; then \
-	        printf 'OK       %s\n' "$$f"; \
-	    else \
-	        printf 'PENDENTE %s\n' "$$f"; \
-	    fi; \
+	    if [ -f "$$f" ]; then printf 'OK       %s\n' "$$f"; \
+	    else printf 'PENDENTE %s\n' "$$f"; fi; \
 	done
 
-# Nao comeca um build parcial nem oculta um header ainda nao publicado.
-# A compatibilidade das assinaturas C++ sera validada quando todos chegarem.
 check-integration:
 	@missing=0; for f in $(REQUIRED_FILES); do \
-	    if [ ! -f "$$f" ]; then \
-	        echo "PENDENTE: $$f" >&2; \
-	        missing=1; \
-	    fi; \
+	    if [ ! -f "$$f" ]; then echo "PENDENTE: $$f" >&2; missing=1; fi; \
 	done; \
 	if [ $$missing -ne 0 ]; then \
-	    echo "ERRO: falta integrar os modulos acima do Checkpoint 3." >&2; \
-	    echo "Use 'make status' para consultar os arquivos presentes." >&2; \
-	    exit 1; \
+	    echo "ERRO: faltam modulos do carregador. Consulte make status." >&2; exit 1; \
 	fi
 
-# Exigir a verificacao antes de QUALQUER objeto, inclusive com make -j.
-$(LOCAL_OBJ) $(ASM_OBJ) $(SIM_OBJ) $(TEST_OBJ): | check-integration
+# A verificacao deve acontecer antes dos objetos, inclusive com make -j.
+$(OBJECTS) $(TEST_OBJ): | check-integration
 
 $(TARGET): $(OBJECTS) | check-integration
-	$(CXX) $(CXXFLAGS) $(OBJECTS) -o $@
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
 build/%.o: %.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(DEPFLAGS) -c $< -o $@
 
-build/checkpoint_2/%.o: ../checkpoint_2/%.cpp
+build/simulator/%.o: $(SIM_DIR)/src/%.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(DEPFLAGS) -c $< -o $@
 
+# Testes basicos da CLI real; a suite detalhada e a Parte 7.
+# Objeto minimo sem M: 3 bytes em 0x1000, com entrada em 0x1000.
+smoke: $(TARGET)
+	@mkdir -p build/smoke
+	@printf '%s\n' 'HTEST  001000000003' 'T00100003010003' 'E001000' > build/smoke/valid.obj
+	@./$(TARGET) build/smoke/valid.obj > build/smoke/default.log
+	@grep -q '^Base de carga: 0x001000$$' build/smoke/default.log
+	@grep -q '^Bytes carregados: 3$$' build/smoke/default.log
+	@grep -q '^Endereco de entrada: 0x001000$$' build/smoke/default.log
+	@grep -q '^PC final: 0x001000$$' build/smoke/default.log
+	@./$(TARGET) build/smoke/valid.obj --load-address 2000 > build/smoke/relocated.log
+	@grep -q '^Base de carga: 0x002000$$' build/smoke/relocated.log
+	@grep -q '^Bytes carregados: 3$$' build/smoke/relocated.log
+	@grep -q '^Endereco de entrada: 0x002000$$' build/smoke/relocated.log
+	@grep -q '^PC final: 0x002000$$' build/smoke/relocated.log
+	@status=0; ./$(TARGET) build/smoke/valid.obj --load-address ZZ \
+	    > build/smoke/usage.log 2>&1 || status=$$?; \
+	    if [ $$status -ne 2 ]; then echo 'ERRO: CLI deveria retornar 2.' >&2; exit 1; fi
+	@printf '%s\n' 'INVALIDO' > build/smoke/invalid.obj
+	@status=0; ./$(TARGET) build/smoke/invalid.obj \
+	    > build/smoke/invalid.log 2>&1 || status=$$?; \
+	    if [ $$status -ne 1 ]; then echo 'ERRO: carga invalida deveria retornar 1.' >&2; exit 1; fi
+	@echo 'Smoke tests: base padrao, base explicita, PC e codigos de saida: OK'
+
 ifneq ($(strip $(TEST_SRC)),)
 $(TEST_BIN): $(LIB_OBJ) $(TEST_OBJ) | check-integration
-	$(CXX) $(CXXFLAGS) $^ -o $@
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
-test: $(TEST_BIN) smoke
+test: smoke $(TEST_BIN)
 	./$(TEST_BIN)
 else
 test: smoke
-	@echo "AVISO: tests/*.cpp ainda nao existe; executados testes basicos de CLI e integracao."
+	@echo 'AVISO: suite tests/test_object_loader.cpp ausente; executados apenas smoke tests.'
 endif
 
-# Testes minimos de CLI + pipeline (inclui uma macro simples).
-# Os testes detalhados de aninhamento, .SER e recursao pertencem a Parte 7.
-smoke: $(TARGET)
-	@mkdir -p build/smoke
-	@printf '%s\n' 'COPY START 1000' 'FIRST LDA #3' '      STA VALUE' \
-	    'VALUE RESW 1' '      END FIRST' > build/smoke/valid.asm
-	@./$(TARGET) build/smoke/valid.asm -o build/smoke/valid.obj \
-	    --expanded build/smoke/expanded.asm
-	@grep -q '^H' build/smoke/valid.obj
-	@grep -q '^T' build/smoke/valid.obj
-	@grep -q '^E' build/smoke/valid.obj
-	@printf '%s\n' 'COPY START 1000' '      MCDEFN' 'SOMAUM &NUM' \
-	    '      LDA &NUM' '      ADD #1' '      MCEND' \
-	    'FIRST SOMAUM #3' '      STA VALUE' 'VALUE RESW 1' \
-	    '      END FIRST' > build/smoke/macro.asm
-	@./$(TARGET) build/smoke/macro.asm -o build/smoke/macro.obj \
-	    --expanded build/smoke/macro_expanded.asm > build/smoke/macro.log
-	@grep -q 'Macros definidas: 1' build/smoke/macro.log
-	@grep -q 'Expansoes realizadas: 1' build/smoke/macro.log
-	@grep -q 'LDA #3' build/smoke/macro_expanded.asm
-	@grep -q 'ADD #1' build/smoke/macro_expanded.asm
-	@! grep -Eq 'MCDEFN|MCEND|SOMAUM' build/smoke/macro_expanded.asm
-	@grep -q '^H' build/smoke/macro.obj
-	@grep -q '^T' build/smoke/macro.obj
-	@grep -q '^E' build/smoke/macro.obj
-	@cp build/smoke/valid.obj build/smoke/old.obj
-	@printf '%s\n' 'BAD START 1000' '    LDA MISSING' '    END' \
-	    > build/smoke/invalid.asm
-	@status=0; ./$(TARGET) build/smoke/invalid.asm \
-	    -o build/smoke/valid.obj --expanded build/smoke/expanded.asm \
-	    > build/smoke/invalid.log 2>&1 || status=$$?; \
-	    if [ $$status -ne 1 ]; then \
-	        echo "ERRO: fonte invalido deveria retornar codigo 1." >&2; exit 1; fi
-	@cmp -s build/smoke/valid.obj build/smoke/old.obj || \
-	    (echo "ERRO: objeto anterior sobrescrito em caso de falha." >&2; exit 1)
-	@status=0; ./$(TARGET) > build/smoke/usage.log 2>&1 || status=$$?; \
-	    if [ $$status -ne 2 ]; then \
-	        echo "ERRO: argumentos ausentes deveriam retornar codigo 2." >&2; exit 1; fi
-	@echo "Smoke tests: CLI, macro simples, montagem, codigos de saida e objeto preservado: OK"
-
-run: $(TARGET)
-	@if [ -z "$(INPUT)" ]; then \
-		echo "Uso: make run INPUT=arquivo.asm [ARGS='-o saida.obj']" >&2; exit 2; \
-	fi
-	./$(TARGET) "$(INPUT)" $(ARGS)
-
 clean:
-	rm -rf build macro_assembler macro_assembler.exe
+	rm -rf build object_loader object_loader.exe
 
 -include $(OBJECTS:.o=.d) $(TEST_OBJ:.o=.d)
