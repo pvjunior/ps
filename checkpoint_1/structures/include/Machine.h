@@ -34,6 +34,7 @@ public:
     // ----- control -----
     bool step();                // never throws; false = halted or error
     void reset();               // registers + CPU back to the start (memory is kept)
+    bool setPC(uint32_t addr);  // sets PC to addr (24-bit, within memory); false if out of range
     Loader& loader();           // insert code into memory
 
     // ----- observers: registers -----
