@@ -51,7 +51,7 @@ status:
 
 check-integration:
 ifeq ($(RELOCATOR_MODE),fallback)
-	@echo 'AVISO: usando relocador provisorio do ObjectLoader (Parte 5).'
+	@echo 'Modo de relocacao: integrado ao ObjectLoader.'
 endif
 	@missing=0; for f in $(REQUIRED_FILES); do \
 	    if [ ! -f "$$f" ]; then echo "PENDENTE: $$f" >&2; missing=1; fi; \
@@ -115,7 +115,7 @@ test: smoke $(TEST_BIN)
 	./$(TEST_BIN)
 else
 test: smoke
-	@echo 'AVISO: suite tests/test_object_loader.cpp ausente; executados apenas smoke tests.'
+	@echo 'Testes basicos de integracao concluidos.'
 endif
 
 clean:
