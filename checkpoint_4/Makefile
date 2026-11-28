@@ -14,7 +14,17 @@ TARGET   := object_loader$(EXEEXT)
 TEST_BIN := build/test_object_loader$(EXEEXT)
 
 # Lista explicita: nao incorpora as copias dos modulos de macros do CP3.
-LOADER_MODULES := ObjectParser LoadPlanner Relocator ObjectLoader
+LOADER_MODULES := ObjectParser LoadPlanner ObjectLoader
+# ObjectLoader ja fornece fallback quando o Relocator ainda nao foi publicado.
+# Se apenas um dos dois arquivos existir, o check-integration acusa a falta do outro.
+RELOCATOR_FILES := include/Relocator.h src/Relocator.cpp
+ifneq ($(strip $(wildcard $(RELOCATOR_FILES))),)
+LOADER_MODULES += Relocator
+RELOCATOR_MODE := external
+else
+RELOCATOR_MODE := fallback
+endif
+RELOCATOR_STAMP := build/.relocator-$(RELOCATOR_MODE)
 LOADER_SRC := $(addprefix src/,$(addsuffix .cpp,$(LOADER_MODULES)))
 SIM_MODULES := CPU Loader Machine Memory Registers
 SIM_SRC := $(addprefix $(SIM_DIR)/src/,$(addsuffix .cpp,$(SIM_MODULES)))
@@ -33,18 +43,31 @@ TEST_OBJ := $(patsubst %.cpp,build/%.o,$(TEST_SRC))
 all: $(TARGET)
 
 status:
+	@echo "Modo do relocador: $(RELOCATOR_MODE)"
 	@for f in $(REQUIRED_FILES); do \
 	    if [ -f "$$f" ]; then printf 'OK       %s\n' "$$f"; \
 	    else printf 'PENDENTE %s\n' "$$f"; fi; \
 	done
 
 check-integration:
+ifeq ($(RELOCATOR_MODE),fallback)
+	@echo 'AVISO: usando relocador provisorio do ObjectLoader (Parte 5).'
+endif
 	@missing=0; for f in $(REQUIRED_FILES); do \
 	    if [ ! -f "$$f" ]; then echo "PENDENTE: $$f" >&2; missing=1; fi; \
 	done; \
 	if [ $$missing -ne 0 ]; then \
 	    echo "ERRO: faltam modulos do carregador. Consulte make status." >&2; exit 1; \
 	fi
+
+# Forca a recompilacao da fachada ao mudar entre fallback e modulo externo,
+# inclusive se Relocator.h ainda nao constava no arquivo de dependencias .d.
+$(RELOCATOR_STAMP): | check-integration
+	@mkdir -p build
+	@rm -f build/.relocator-fallback build/.relocator-external
+	@touch $@
+
+build/src/ObjectLoader.o: $(RELOCATOR_STAMP) $(wildcard include/Relocator.h)
 
 # A verificacao deve acontecer antes dos objetos, inclusive com make -j.
 $(OBJECTS) $(TEST_OBJ): | check-integration
